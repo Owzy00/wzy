@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {GestureMachine,describeHand,HandNavigator} from '../dist/gesture-core.js';
-import {MorphTimeline,WindField,decodeCloud,createParticleBuffer,StatueStage} from '../dist/particle-effects.js';
+import {MorphTimeline,WindField,decodeCloud,createParticleBuffer,StatueStage,FixedStarBand,statueTransform} from '../dist/particle-effects.js';
 import {GestureCamera} from '../dist/gesture-camera.js';
 const state={selected:3,busy:false,enabled:true};
 const sample=(pose,x=.62,y=.5)=>({pose,palm:{x,y},tip:{x,y},confidence:.95});
@@ -71,8 +71,19 @@ test('late finish still delivers the completion event to the next display frame'
 test('a ripple pushes only decorative particles outward and expires without a residual displacement',()=>{
  const field=new WindField(),stars=Object.freeze([{ra:1.2,dec:-.3}]),before=JSON.stringify(stars);field.ripple({x:.5,y:.5},0);field.prepare(600);const a=field.offset(500+600*.6*.33,300,1000,600),b=field.offset(500-600*.6*.33,300,1000,600);assert.ok(a[0]>5);assert.ok(b[0]<-5);assert.ok(Math.abs(a[1])<1e-8);field.prepare(2600);assert.deepEqual(field.offset(620,300,1000,600),[0,0]);assert.equal(JSON.stringify(stars),before);
 });
-test('particle interaction is smoothed and keeps a bounded ripple history',()=>{
+test('model motion is smooth, never creates ripples, and clicks do not move the model',()=>{
  const stage=new StatueStage(),gl=new Proxy({}, {get:()=>()=>{}});stage.gl=gl;stage.program={};stage.uniforms={};stage.canvas={width:0,height:0,style:{}};stage.origin={x:500,y:300};stage.timeline.start(0);stage.lastDraw=3500;stage.animationStarted=0;
  const prior=globalThis.devicePixelRatio;globalThis.devicePixelRatio=1;
- try{stage.interact(1,0,3500,1);stage.draw(null,3516,1000,600,null);assert.ok(stage.pointer.x>0&&stage.pointer.x<.3);assert.ok(stage.pointer.y<0&&stage.pointer.y>-.3);for(let i=1;i<10;i++)stage.interact(.5,.5,3500+i*300,1);assert.equal(stage.ripples.length,3);stage.draw(null,9000,1000,600,null);assert.equal(stage.ripples.length,0);}finally{if(prior===undefined)delete globalThis.devicePixelRatio;else globalThis.devicePixelRatio=prior;}
+ try{stage.interact(1,0,3500);stage.draw(null,3516,1000,600,null);assert.ok(stage.pointer.x>0&&stage.pointer.x<.3);assert.ok(stage.pointer.y<0&&stage.pointer.y>-.3);for(let i=1;i<10;i++)stage.interact(i%2,1-i%2,3500+i*300);assert.equal(stage.ripples.length,0);const target={...stage.pointerTarget};for(let i=1;i<5;i++)stage.ripple(.5,.5,6500+i*300,1);assert.equal(stage.ripples.length,3);assert.deepEqual(stage.pointerTarget,target);stage.draw(null,11000,1000,600,null);assert.equal(stage.ripples.length,0);}finally{if(prior===undefined)delete globalThis.devicePixelRatio;else globalThis.devicePixelRatio=prior;}
+});
+
+test('decorative band remains fixed while the live camera, projection, zoom and wind change',()=>{
+ const camera={ra:4.2,dec:-.15,fov:1.64,zoom:1},viewport={w:900,h:600,cx:650,cy:400},band=new FixedStarBand(camera),particles=Array.from({length:30},(_,i)=>({t:i*.2,width:(i%5-2)*.3,phase:i*.7})),initial=particles.map(p=>band.project(p,viewport)),wind=new WindField();
+ assert.ok(initial.some(Boolean));for(let i=0;i<100;i++){camera.ra=i*.3;camera.dec=Math.sin(i)*1.4;camera.fov=.4+i*.015;camera.zoom=1+i*.05;wind.push({x:.5,y:.5,dx:1,dy:-1},i*20);wind.prepare(i*20+300);assert.deepEqual(particles.map(p=>band.project(p,viewport)),initial);}assert.ok(Object.isFrozen(band.reference));
+});
+test('fixed band scales with the window without acquiring a navigation offset',()=>{
+ const band=new FixedStarBand({ra:4.2,dec:-.15,fov:1.64,zoom:1}),particle={t:4.1,width:0,phase:2},a=band.project(particle,{w:900,h:600,cx:650,cy:400}),b=band.project(particle,{w:1800,h:1200,cx:1300,cy:800});assert.ok(Math.abs(b.x-a.x*2)<1e-8);assert.ok(Math.abs(b.y-a.y*2)<1e-8);assert.equal(a.z,b.z);
+});
+test('the shared statue transform keeps horizontal motion and caps translation and yaw',()=>{
+ const pointer=Object.freeze({x:1,y:-1}),before=JSON.stringify(pointer),right=statueTransform(pointer,1200,800),left=statueTransform({x:-1,y:1},1200,800);assert.ok(right.x>60&&right.x<=105);assert.ok(right.y>=-18&&right.y<0);assert.ok(Math.abs(right.yaw)<=.018);assert.equal(right.x,-left.x);assert.equal(right.y,-left.y);assert.deepEqual(statueTransform({x:99,y:-99},1200,800),right);assert.equal(JSON.stringify(pointer),before);
 });
