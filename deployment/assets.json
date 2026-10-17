@@ -1,0 +1,289 @@
+[
+  {
+    "path": "dist/assets/statues/00-source.png",
+    "bytes": 139481,
+    "sha256": "1aed31bc2f583f52c3a605c0c30efa28d6c35589ef114454ed556c74d96597ca",
+    "parts": [
+      "deployment/assets/dist-assets-statues-00-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/01-source.png",
+    "bytes": 180264,
+    "sha256": "3b6e71b615f859f228f58f2eee38bc82a7bad755a249a77591249816808cf16c",
+    "parts": [
+      "deployment/assets/dist-assets-statues-01-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/02-source.png",
+    "bytes": 135967,
+    "sha256": "eeceea52faafe6aa0b5c5cf5bc2273cfdd858aaa16b1c07d68544e36e07e36e7",
+    "parts": [
+      "deployment/assets/dist-assets-statues-02-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/03-source.png",
+    "bytes": 173649,
+    "sha256": "af17ff0e3132ac996267de8bca0bf005c3f91d56cfe28e7c810c09a325fc4d69",
+    "parts": [
+      "deployment/assets/dist-assets-statues-03-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/04-source.png",
+    "bytes": 154150,
+    "sha256": "a7628126d29ea1ad148e83e3cede385836733a899249c2644ff2a220e3207f22",
+    "parts": [
+      "deployment/assets/dist-assets-statues-04-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/05-source.png",
+    "bytes": 165854,
+    "sha256": "1e8d195b782793007038382680f5c68f0270b52ee4e6f15997f8206b1dba926e",
+    "parts": [
+      "deployment/assets/dist-assets-statues-05-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/06-source.png",
+    "bytes": 171085,
+    "sha256": "8ae3710bb8e408c461c42202fd2376cd1183308421fe515d47bcae0238515858",
+    "parts": [
+      "deployment/assets/dist-assets-statues-06-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/07-source.png",
+    "bytes": 165903,
+    "sha256": "9f6dfb836ad06ae04fe4f76365d47e7e04bc488a88f814d6018f79b7927f9b84",
+    "parts": [
+      "deployment/assets/dist-assets-statues-07-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/08-source.png",
+    "bytes": 157494,
+    "sha256": "1a925658b85a465868e37d9f943122e602cdb684075c6bd7ef5386392e3f9aa5",
+    "parts": [
+      "deployment/assets/dist-assets-statues-08-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/09-source.png",
+    "bytes": 188365,
+    "sha256": "0e6b8a2bc6c5ef0dd6406e09f493cb838804559607b3f7f1a26ee71e2e639bcb",
+    "parts": [
+      "deployment/assets/dist-assets-statues-09-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/10-source.png",
+    "bytes": 156738,
+    "sha256": "3ce04cce8d338e445b98c12cd7e5d1df88234267a6a4d68e16095d151779ce30",
+    "parts": [
+      "deployment/assets/dist-assets-statues-10-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/11-source.png",
+    "bytes": 142642,
+    "sha256": "6df9ae2c2c4b0dc2b52be7e0a8d549fba4a65737e0283a2494dbbf329ee4884f",
+    "parts": [
+      "deployment/assets/dist-assets-statues-11-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/12-source.png",
+    "bytes": 183618,
+    "sha256": "c15adfe4847b65bb7493d8b7669888cf453fe348e5723b349938be625634b7fd",
+    "parts": [
+      "deployment/assets/dist-assets-statues-12-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/13-source.png",
+    "bytes": 141294,
+    "sha256": "e30110f52e31dcb71ef687a21d9e3b5f037b6a30e92193852816580b9dad5797",
+    "parts": [
+      "deployment/assets/dist-assets-statues-13-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/14-source.png",
+    "bytes": 168658,
+    "sha256": "99f400d35294982696fcb3d53bdf026aa5cd7eed0da2735b10719f1e3cdaf120",
+    "parts": [
+      "deployment/assets/dist-assets-statues-14-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/15-source.png",
+    "bytes": 126382,
+    "sha256": "5781d22764c90bab9673f302415f195c04fe670041c950023bbafbe0000278a3",
+    "parts": [
+      "deployment/assets/dist-assets-statues-15-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/16-source.png",
+    "bytes": 206188,
+    "sha256": "9e56da0f960f25c1e19fc7f25398f280089ef25bfd291eb08bb9eaf0da32fe9b",
+    "parts": [
+      "deployment/assets/dist-assets-statues-16-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/17-source.png",
+    "bytes": 143714,
+    "sha256": "1011e3d02ef90ee9ad1d7caf607c20acacaed82e21dce699004add59fd646eb0",
+    "parts": [
+      "deployment/assets/dist-assets-statues-17-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/18-source.png",
+    "bytes": 131361,
+    "sha256": "13555390f1cc7d1dc026f185e0b0e375a146f70478a664ddf61e3086f4881820",
+    "parts": [
+      "deployment/assets/dist-assets-statues-18-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/19-source.png",
+    "bytes": 220932,
+    "sha256": "5a8ce91b1b497ebb575d996d7b66a075fe8dc83929406976192b4e1e40359d5e",
+    "parts": [
+      "deployment/assets/dist-assets-statues-19-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/20-source.png",
+    "bytes": 158831,
+    "sha256": "7b21a0e6d8ccf8ee6b9c356916b98e59b12a51b3fae63aaebe048e0c1cba9fc2",
+    "parts": [
+      "deployment/assets/dist-assets-statues-20-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/21-source.png",
+    "bytes": 150436,
+    "sha256": "f47235ab91cd0137e20fcb5e60f127270d932f0968d419210d273ce5b6b1e9c0",
+    "parts": [
+      "deployment/assets/dist-assets-statues-21-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/22-source.png",
+    "bytes": 163574,
+    "sha256": "3fcbbd800d31ed30361f0b5f3975244eafbb7a0bbc977488ae4ab7bac34343a5",
+    "parts": [
+      "deployment/assets/dist-assets-statues-22-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/23-source.png",
+    "bytes": 147356,
+    "sha256": "31bf3155d14d9db58a7cdbd166cfb71a55d1fd4537450f3b2b1d9da2e7c14172",
+    "parts": [
+      "deployment/assets/dist-assets-statues-23-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/24-source.png",
+    "bytes": 152399,
+    "sha256": "a51c833f9309540704966bc5188fc4f8c17cda3ce068c592d84f30735bb2679b",
+    "parts": [
+      "deployment/assets/dist-assets-statues-24-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/25-source.png",
+    "bytes": 142209,
+    "sha256": "2db6decce647de0ee98864e192466a22446ef5289c8e988501906f521cecb4c7",
+    "parts": [
+      "deployment/assets/dist-assets-statues-25-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/26-source.png",
+    "bytes": 135665,
+    "sha256": "730d60f0874c7494634225d57b474bea081a902e57c315294ad06fa6437aba4b",
+    "parts": [
+      "deployment/assets/dist-assets-statues-26-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/assets/statues/27-source.png",
+    "bytes": 206914,
+    "sha256": "290bd0a95214546f6dba0da933c645a3b59ce245dce1901ef066d609d1524088",
+    "parts": [
+      "deployment/assets/dist-assets-statues-27-source-png/000.b64"
+    ]
+  },
+  {
+    "path": "dist/data/statues.json",
+    "bytes": 15843566,
+    "sha256": "70e0f1ef689c9508552c06d14673e3d8079c5b1660755607bc720a5c62220966",
+    "parts": [
+      "deployment/assets/dist-data-statues-json/000.b64",
+      "deployment/assets/dist-data-statues-json/001.b64",
+      "deployment/assets/dist-data-statues-json/002.b64",
+      "deployment/assets/dist-data-statues-json/003.b64",
+      "deployment/assets/dist-data-statues-json/004.b64",
+      "deployment/assets/dist-data-statues-json/005.b64",
+      "deployment/assets/dist-data-statues-json/006.b64",
+      "deployment/assets/dist-data-statues-json/007.b64",
+      "deployment/assets/dist-data-statues-json/008.b64",
+      "deployment/assets/dist-data-statues-json/009.b64"
+    ]
+  },
+  {
+    "path": "dist/vendor/mediapipe/hand_landmarker.task",
+    "bytes": 7819105,
+    "sha256": "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",
+    "parts": [
+      "deployment/assets/dist-vendor-mediapipe-hand-landmarker-task/000.b64",
+      "deployment/assets/dist-vendor-mediapipe-hand-landmarker-task/001.b64",
+      "deployment/assets/dist-vendor-mediapipe-hand-landmarker-task/002.b64",
+      "deployment/assets/dist-vendor-mediapipe-hand-landmarker-task/003.b64",
+      "deployment/assets/dist-vendor-mediapipe-hand-landmarker-task/004.b64",
+      "deployment/assets/dist-vendor-mediapipe-hand-landmarker-task/005.b64"
+    ]
+  },
+  {
+    "path": "dist/vendor/mediapipe/wasm/vision_wasm_internal.wasm",
+    "bytes": 13519922,
+    "sha256": "0e101a010e262ef8e78f22e3c95b60a9705fd06962753c9acd6356d9fb56b7bd",
+    "parts": [
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-internal-wasm/000.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-internal-wasm/001.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-internal-wasm/002.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-internal-wasm/003.b64"
+    ]
+  },
+  {
+    "path": "dist/vendor/mediapipe/wasm/vision_wasm_module_internal.wasm",
+    "bytes": 13519940,
+    "sha256": "3b57e4b55ac6346bf940212e3e11250b308a6a474077385e2f527b119cf74525",
+    "parts": [
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-module-internal-wasm/000.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-module-internal-wasm/001.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-module-internal-wasm/002.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-module-internal-wasm/003.b64"
+    ]
+  },
+  {
+    "path": "dist/vendor/mediapipe/wasm/vision_wasm_nosimd_internal.wasm",
+    "bytes": 12627509,
+    "sha256": "c9b1b69bb87baf9e529254d8559dcbcf4c5a9c0eda84f56a12f17d675335ec9c",
+    "parts": [
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-nosimd-internal-wasm/000.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-nosimd-internal-wasm/001.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-nosimd-internal-wasm/002.b64",
+      "deployment/assets/dist-vendor-mediapipe-wasm-vision-wasm-nosimd-internal-wasm/003.b64"
+    ]
+  }
+]

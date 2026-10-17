@@ -1,0 +1,27 @@
+Astronomical coordinates: d3-celestial stars.6.json, HIP identifiers, equatorial J2000 degrees, visual magnitude. Olaf Frohn. BSD-3-Clause.
+Source revision: 6d5e96655e0f1fe70b1eb7cf9be0eed5290e1458
+https://github.com/ofrohn/d3-celestial
+
+Chinese asterism line data: Stellarium stellarium-skycultures/chinese/index.json
+Revision: 106475b3b67488108cd5a346a737f3df42b3c7ad
+Contributors: Karrie Berglund, Sun Shuwei, Stellarium team.
+Source description declares: Text and line: CC BY-SA.
+https://github.com/Stellarium/stellarium-skycultures/tree/106475b3b67488108cd5a346a737f3df42b3c7ad/chinese
+Adaptation: selected 28 principal mansion asterisms, Chinese name for Star filled as 星宿; grouping and order added. This adapted line dataset remains CC BY-SA. No historical uniqueness is asserted.
+
+Copyright (c) 2015, Olaf Frohn
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+MediaPipe Tasks Vision 1.1.1: Google, Apache-2.0. Bundled license: ../vendor/mediapipe/LICENSE; dependency and model provenance: ../vendor/mediapipe/provenance.json.
+User-supplied statue photographs: usage permission for image processing, web display and particle morph was explicitly confirmed in this chat on 2026-10-16. Source watermark credits: 乐观人文 / LeGuan Culture. No ownership claim is made. Subject point extraction excludes title/credit bands; complete original panel tiles retain their printed content. Source SHA-256 and adapted cloud details are in statues.json. User photograph rights remain separate from the CC BY-SA asterism line data.

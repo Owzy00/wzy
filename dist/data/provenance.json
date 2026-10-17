@@ -1,0 +1,44 @@
+{
+  "retrieved": "2026-10-16",
+  "frame": "equatorial J2000.0",
+  "units": {
+    "ra": "degrees (input), radians (renderer)",
+    "dec": "degrees (input), radians (renderer)",
+    "magnitude": "visual magnitude"
+  },
+  "stars": {
+    "repository": "https://github.com/ofrohn/d3-celestial",
+    "baseFile": "data/stars.6.json",
+    "baseFileRevision": "6d5e96655e0f1fe70b1eb7cf9be0eed5290e1458",
+    "count": 5044,
+    "supplementFile": "data/stars.8.json",
+    "supplementBlob": "8bff877434691edd64ae9c9218ae5a58b1a77f45",
+    "supplementHIP": [
+      5175,
+      46744,
+      49321,
+      53975,
+      57587
+    ],
+    "license": "BSD-3-Clause",
+    "credit": "Olaf Frohn"
+  },
+  "asterisms": {
+    "repository": "https://github.com/Stellarium/stellarium-skycultures",
+    "file": "chinese/index.json",
+    "revision": "106475b3b67488108cd5a346a737f3df42b3c7ad",
+    "credit": "Karrie Berglund; Sun Shuwei; Stellarium team",
+    "license": "CC BY-SA (as declared in chinese/description.md)",
+    "adaptations": [
+      "28 principal mansion asterisms extracted",
+      "Chinese label 星宿 supplied for English Star",
+      "Four-symbol ordering and grouping added"
+    ]
+  },
+  "limitations": [
+    "Fixed J2000 frame, no precession, proper motion or observation site/date conversion",
+    "Only principal mansion asterisms are displayed, not entire historical mansion regions",
+    "Line patterns reflect the selected Stellarium source, not a unique historical standard",
+    "Decorative dust is independent procedural art, not astronomical objects"
+  ]
+}
