@@ -10,12 +10,14 @@ export function describeHand(landmarks,confidence=1,handCount=1){
  return {pose:count>=3?'open':count===0&&folded.every(Boolean)?'fist':extended[0]&&count===1?'point':'neutral',palm:{x:1-palm.x,y:palm.y},tip:{x:1-landmarks[8].x,y:landmarks[8].y},confidence,span};
 }
 export class GestureMachine{
- constructor(){this.state='IDLE';this.pose='neutral';this.since=0;this.lastTime=-1;this.lastSeen=-1;this.history=[];this.cooldownUntil=0;this.progress=0;this.lastSelection=null;this.selectionSince=0;this.disarm();}
+ constructor(){this.state='IDLE';this.pose='neutral';this.since=0;this.lastTime=-1;this.lastSeen=-1;this.cooldownUntil=0;this.progress=0;this.lastSelection=null;this.disarm();}
  disarm(){this.armed=false;this.anchor=null;this.lastFist=-1;this.openSince=null;this.openSamples=0;this.fistSamples=0;}
- reset(now=0,state='IDLE'){this.state=state;this.since=now;this.history=[];this.progress=0;this.pose='neutral';this.disarm();}
+ reset(now=0,state='IDLE'){this.state=state;this.since=now;this.progress=0;this.pose='neutral';this.disarm();}
+ // Acknowledging our own fist selection keeps this sequence armed. Mouse selection resets it.
+ confirmSelection(selected){if(!this.armed)return;this.lastSelection=selected;if(selected===null)this.disarm();}
  update(sample,now,{selected=null,busy=false,enabled=true}={}){
   if(now<=this.lastTime)return null;const gap=this.lastTime>=0?now-this.lastTime:0;this.lastTime=now;
-  if(selected!==this.lastSelection){this.lastSelection=selected;this.selectionSince=now;this.reset(now);}
+  if(selected!==this.lastSelection){this.lastSelection=selected;this.reset(now);}
   if(!enabled||busy){this.reset(now,'BLOCKED');return null;}
   if(this.state==='BLOCKED')this.reset(now);
   if(now<this.cooldownUntil){this.state='COOLDOWN';this.progress=0;this.disarm();return null;}
@@ -24,22 +26,24 @@ export class GestureMachine{
   if(gap>500)this.reset(now);
   this.lastSeen=now;
   // A new or abruptly relocated hand must start a fresh fist-to-palm sequence.
-  if(this.armed&&this.anchor){const ratio=sample.span&&this.anchor.span?sample.span/this.anchor.span:1;if(distance(sample.palm,this.anchor.palm)>.25||ratio<.55||ratio>1.8)this.reset(now);}
+  if(this.armed&&this.anchor){const ratio=sample.span&&this.anchor.span?sample.span/this.anchor.span:1;if(distance(sample.palm,this.anchor.palm)>.25||ratio<.55||ratio>1.8){this.reset(now);return null;}}
   if(sample.pose==='fist'){
-   this.history=[];this.openSince=null;this.openSamples=0;this.lastFist=now;
+   this.openSince=null;this.openSamples=0;this.lastFist=now;
    if(this.pose!=='fist'){this.pose='fist';this.since=now;this.fistSamples=0;}
    this.fistSamples++;
-   if(this.armed||(now-this.since>=450&&this.fistSamples>=3)){
+   if(this.armed){this.state='FIST_READY';this.progress=.65;return null;}
+   if(now-this.since>=350&&this.fistSamples>=3){
     this.armed=true;this.anchor={palm:{...sample.palm},span:sample.span};this.state='FIST_READY';this.progress=.65;
-   }else{this.state='FIST_ARMING';this.progress=Math.min(.64,(now-this.since)/450*.65);}
+    return {type:'select'};
+   }else{this.state='FIST_ARMING';this.progress=Math.min(.64,(now-this.since)/350*.65);}
    return null;
   }
   if(this.armed){
    if(now-this.lastFist>1800){this.reset(now);return null;}
    if(sample.pose==='open'){
     this.openSince??=now;this.openSamples++;this.state='OPENING';this.progress=.65+Math.min(1,(now-this.openSince)/180)*.35;
-    if(now-this.openSince>=180&&this.openSamples>=2&&selected!==null&&now-this.selectionSince>=750){
-     this.disarm();this.history=[];this.cooldownUntil=now+3500;this.state='COOLDOWN';this.progress=1;
+    if(now-this.openSince>=180&&this.openSamples>=2&&selected!==null){
+     this.disarm();this.cooldownUntil=now+1200;this.state='COOLDOWN';this.progress=1;
      return {type:'morph',selected};
     }
    }else{
@@ -50,11 +54,31 @@ export class GestureMachine{
    return null;
   }
   if(sample.pose!=='open'){this.reset(now);return null;}
-  if(this.pose!=='open'||['IDLE','LOST'].includes(this.state)){this.pose='open';this.since=now;this.state='ARMING';this.history=[];return null;}
-  if(now-this.since<380){this.progress=0;return null;}
-  const point=sample.palm;if(this.history.length&&distance(point,this.history.at(-1))>.30){this.reset(now);return null;}
-  this.state='WAVE_READY';this.progress=0;this.history.push({...point,t:now});this.history=this.history.filter(p=>now-p.t<=700);
-  if(this.history.length>=3){const a=this.history[0],b=this.history.at(-1),duration=(b.t-a.t)/1000,dx=b.x-a.x,dy=b.y-a.y,travel=Math.hypot(dx,dy);let path=0;for(let i=1;i<this.history.length;i++)path+=distance(this.history[i],this.history[i-1]);if(duration>=.16&&travel>.13&&travel/duration>.42&&travel/Math.max(path,.001)>.83){this.cooldownUntil=now+850;this.state='COOLDOWN';this.history=[];return {type:'wave',x:b.x,y:b.y,dx:dx/duration,dy:dy/duration};}}
+  this.pose='open';this.state='NAVIGATING';this.progress=0;
   return null;
+ }
+}
+
+// Estimate hand velocity at camera cadence; integrate and damp it at display cadence.
+// Reacquisition establishes an anchor and never turns a new hand position into a jump.
+export class HandNavigator{
+ constructor(){this.reset();}
+ reset(){this.previous=null;this.velocity={x:0,y:0};this.target={x:0,y:0};this.frameTime=null;this.lastSample=-1;}
+ feed(sample,now){
+  if(!sample||sample.pose!=='open'){this.reset();return;}
+  if(now<=this.lastSample)return;
+  const old=this.previous;this.lastSample=now;this.previous={...sample.palm,t:now,span:sample.span};
+  if(!old||now-old.t>400){this.velocity={x:0,y:0};this.target={x:0,y:0};return;}
+  const dx=sample.palm.x-old.x,dy=sample.palm.y-old.y,travel=Math.hypot(dx,dy),ratio=sample.span&&old.span?sample.span/old.span:1;
+  if(travel>.18||ratio<.6||ratio>1.6){this.velocity={x:0,y:0};this.target={x:0,y:0};return;}
+  const dt=Math.max(.025,(now-old.t)/1000),gain=travel<.0018?0:Math.min(1,(travel-.0018)/.004);
+  this.target={x:Math.max(-.85,Math.min(.85,dx/dt*gain)),y:Math.max(-.7,Math.min(.7,dy/dt*gain))};
+ }
+ step(now){
+  const dt=this.frameTime===null?0:Math.max(0,Math.min(.05,(now-this.frameTime)/1000));this.frameTime=now;
+  if(this.lastSample<0||now-this.lastSample>220)this.target={x:0,y:0};
+  if(this.lastSample<0||now-this.lastSample>450){this.velocity={x:0,y:0};return {dx:0,dy:0};}
+  const ease=1-Math.exp(-dt/.075);this.velocity.x+=(this.target.x-this.velocity.x)*ease;this.velocity.y+=(this.target.y-this.velocity.y)*ease;
+  return {dx:this.velocity.x*dt*1.65,dy:this.velocity.y*dt*1.4};
  }
 }

@@ -1,7 +1,7 @@
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 export function decodeCloud(item){
- const bytes=Uint8Array.from(atob(item.data),c=>c.charCodeAt(0));if(bytes.length!==item.count*9)throw new Error('点云字节数不匹配');
+ const binary=atob(item.data),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);if(bytes.length!==item.count*9)throw new Error('点云字节数不匹配');
  const v=new DataView(bytes.buffer),points=[];for(let i=0;i<item.count;i++){const o=i*9;points.push({x:v.getInt16(o,true)/1000,y:v.getInt16(o+2,true)/1000,z:v.getInt16(o+4,true)/1000,r:v.getUint8(o+6),g:v.getUint8(o+7),b:v.getUint8(o+8)});}return points;
 }
 export class WindField{
@@ -11,7 +11,7 @@ export class WindField{
  offset(x,y,width,height){let dx=0,dy=0;const radius=Math.min(width,height)*.38;for(const g of this.active){const d2=(x-g.x*width)**2+(y-g.y*height)**2;const a=Math.exp(-d2/(radius*radius))*g.strength;dx+=g.dx*a;dy+=g.dy*a;}return [dx,dy];}
 }
 export class MorphTimeline{
- constructor(){this.state='IDLE';this.started=0;this.returned=0;this.cooldownUntil=0;this.duration={gather:2800,hold:8500,return:2300};}
+ constructor(){this.state='IDLE';this.started=0;this.returned=0;this.cooldownUntil=0;this.duration={gather:2200,hold:4200,return:1700};}
  get busy(){return ['GATHERING','HOLDING','RETURNING'].includes(this.state);}
  start(now){if(this.busy||now<this.cooldownUntil)return false;this.started=now;this.state='GATHERING';this.earlyReturn=null;return true;}
  finish(now){if(!this.busy||this.state==='RETURNING')return;const current=this.sample(now);this.returnFrom=current.amount;this.earlyReturn=now;this.state='RETURNING';}
@@ -26,15 +26,19 @@ export class MorphTimeline{
  }
 }
 // Static interleaved GPU data. No star catalogue object is passed into this renderer.
+const particleTemplates=new Map();
 export function createParticleBuffer(points,flowCount=96000){
- const data=new Float32Array((points.length+flowCount)*10);
- const rand=i=>{const x=Math.sin(i*127.13+3.1)*43758.5453;return x-Math.floor(x);};
- for(let i=0;i<points.length+flowCount;i++){
-  const o=i*10,flow=i<flowCount,p=flow?null:points[i-flowCount];
-  if(p){data[o]=p.x;data[o+1]=p.y;data[o+2]=p.z;const lift=Math.max(p.r,p.g,p.b)<75?1.8:1.25;data[o+3]=Math.min(1,p.r*lift/255*.8+.2);data[o+4]=Math.min(1,p.g*lift/255*.8+.15);data[o+5]=Math.min(1,p.b*lift/255*.8+.07);}
-  else{data[o+3]=.93;data[o+4]=.68+rand(i+90)*.18;data[o+5]=.34+rand(i+190)*.20;}
-  data[o+6]=rand(i+1);data[o+7]=rand(i+100001);data[o+8]=rand(i+200001);data[o+9]=flow?1:0;
+ const count=points.length+flowCount;
+ let template=particleTemplates.get(flowCount);
+ if(!template||template.length<count*10){
+  // Reuse all random attributes and the 96k flow particles across mansion changes.
+  template=new Float32Array(Math.max(count,flowCount+48000)*10);
+  const rand=i=>{const x=Math.sin(i*127.13+3.1)*43758.5453;return x-Math.floor(x);};
+  for(let i=0;i<template.length/10;i++){const o=i*10;if(i<flowCount){template[o+3]=.93;template[o+4]=.68+rand(i+90)*.18;template[o+5]=.34+rand(i+190)*.20;template[o+9]=1;}template[o+6]=rand(i+1);template[o+7]=rand(i+100001);template[o+8]=rand(i+200001);}
+  particleTemplates.set(flowCount,template);if(particleTemplates.size>2)particleTemplates.delete(particleTemplates.keys().next().value);
  }
+ const data=template.slice(0,count*10);
+ for(let i=0;i<points.length;i++){const p=points[i],o=(i+flowCount)*10;data[o]=p.x;data[o+1]=p.y;data[o+2]=p.z;const lift=Math.max(p.r,p.g,p.b)<75?1.8:1.25;data[o+3]=Math.min(1,p.r*lift/255*.8+.2);data[o+4]=Math.min(1,p.g*lift/255*.8+.15);data[o+5]=Math.min(1,p.b*lift/255*.8+.07);}
  return {data,count:points.length+flowCount,flowCount};
 }
 const FLOW_VERTEX=`
@@ -81,7 +85,7 @@ precision mediump float;varying vec3 vColor;varying float vAlpha;
 void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;float edge=1.-smoothstep(.45,1.,r);gl_FragColor=vec4(vColor,vAlpha*edge);}
 `;
 export class StatueStage{
- constructor(){this.timeline=new MorphTimeline();this.pointer={x:0,y:0};this.quality=1;this.frameMs=0;this.lastDraw=0;this.pinned=false;this.renderer='uninitialized';this.intervals=[];this.cadence={};this.opacity=0;}
+ constructor(){this.timeline=new MorphTimeline();this.pointer={x:0,y:0};this.quality=1;this.frameMs=0;this.lastDraw=0;this.renderer='uninitialized';this.intervals=[];this.cadence={};this.opacity=0;this.prepared=new Map();}
  get busy(){return this.timeline.busy;}
  get occludesSky(){return this.busy&&this.opacity>=.995;}
  layout(width,height){const mobile=width<850;return {cx:width*(mobile?.44:.51),cy:height*.52,size:Math.max(100,Math.min(height-(mobile?175:140),width*(mobile?1.05:.72))),width,height};}
@@ -105,15 +109,22 @@ export class StatueStage{
   // A canvas with an established WebGL context cannot acquire a 2D context.
   const replacement=document.createElement('canvas');replacement.id='statue-particles';replacement.setAttribute('aria-hidden','true');this.canvas.replaceWith(replacement);this.canvas=replacement;this.gl=null;this.context=replacement.getContext('2d');this.renderer='canvas2d';
  }
+ prepare(item){
+  if(this.prepared.has(item.id))return this.prepared.get(item.id);
+  const points=decodeCloud(item),packed=createParticleBuffer(points);
+  const entry={points,packed};this.prepared.set(item.id,entry);
+  if(this.prepared.size>2)this.prepared.delete(this.prepared.keys().next().value);
+  return entry;
+ }
  start(item,now){
   if(this.busy||now<this.timeline.cooldownUntil)return false;
-  this.initRenderer();this.item=item;this.points=decodeCloud(item);this.origin=null;this.pinned=false;this.intervals=[];this.cadence={};this.fallbackKey='';
-  const packed=createParticleBuffer(this.points,this.renderer==='webgl'?96000:0);this.particleCount=packed.count;
+  this.initRenderer();this.item=item;const prepared=this.prepare(item);this.points=prepared.points;this.origin=null;this.intervals=[];this.cadence={};this.fallbackKey='';
+  const packed=prepared.packed;this.particleCount=packed.count;
   if(this.gl){this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.buffer);this.gl.bufferData(this.gl.ARRAY_BUFFER,packed.data,this.gl.STATIC_DRAW);}else this.prepareFallback();
   // Decode/upload before starting the clock so the first frame never skips ahead.
   this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.canvas.hidden=false;return true;
  }
- finish(now){this.pinned=false;this.timeline.finish(now);}
+ finish(now){this.timeline.finish(now);}
  prepareFallback(){
   this.body=document.createElement('canvas');this.body.width=700;this.body.height=700;const c=this.body.getContext('2d');
   for(const p of this.points){c.fillStyle=`rgb(${Math.min(255,p.r*1.3+24)},${Math.min(255,p.g*1.3+16)},${Math.min(255,p.b*1.3+7)})`;c.globalAlpha=.88;c.fillRect((p.x+.5)*700,(p.y+.5)*700,1.1,1.1);}
@@ -129,7 +140,7 @@ export class StatueStage{
   c.globalAlpha=1;
  }
  draw(ctx,now,width,height,anchor,reduced=false){
-  const started=performance.now();if(this.busy&&this.lastDraw){const dt=now-this.lastDraw;if(dt>0){this.intervals.push(dt);if(this.intervals.length>180)this.intervals.shift();}if(this.pinned&&this.timeline.state==='HOLDING')this.timeline.started+=Math.max(0,dt);}this.lastDraw=now;
+  const started=performance.now();if(this.busy&&this.lastDraw){const dt=now-this.lastDraw;if(dt>0){this.intervals.push(dt);if(this.intervals.length>180)this.intervals.shift();}}this.lastDraw=now;
   const sample=this.timeline.sample(now);
   if(sample.done){if(this.canvas){this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
   const l=this.layout(width,height);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};

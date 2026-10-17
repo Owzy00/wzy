@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {RAD,TAU,wrap,deltaAngle,vector,centerOf,projectSphere,projectAtlas,segmentSamples,formatRA,formatDec} from '../dist/astronomy.js';
+import {RAD,TAU,wrap,deltaAngle,vector,centerOf,projectSphere,projectAtlas,segmentSamples,formatRA,formatDec,panSky,nearestMansion} from '../dist/astronomy.js';
 const stars=[...JSON.parse(await readFile(new URL('../dist/data/stars.json',import.meta.url),'utf8')),...JSON.parse(await readFile(new URL('../dist/data/supplement.json',import.meta.url),'utf8'))];
 const ms=JSON.parse(await readFile(new URL('../dist/data/mansions.json',import.meta.url),'utf8'));
 const byId=new Map(stars.map(([id,ra,dec,mag])=>[id,{ra:wrap(ra*RAD),dec:dec*RAD,mag}]));
@@ -19,3 +19,15 @@ test('spherical member average handles the 24h seam',()=>{const c=centerOf([{ra:
 test('great-circle samples preserve endpoint coordinates including RA seam',()=>{const a={ra:359*RAD,dec:12*RAD},b={ra:2*RAD,dec:17*RAD};const samples=segmentSamples(a,b,24);near(deltaAngle(samples[0].ra,a.ra),0);near(samples.at(-1).dec,b.dec);for(const p of samples){const v=vector(p.ra,p.dec);near(Math.hypot(...v),1);assert.ok(Math.abs(deltaAngle(p.ra,0))<4*RAD);}});
 test('projection and sampling never mutate catalogue objects',()=>{const before=JSON.stringify([...byId]);for(let tick=0;tick<100;tick++)for(const m of ms){const members=[...new Set(m.lines.flat())].map(id=>byId.get(id));centerOf(members);for(const s of members){projectSphere(s.ra,s.dec,{...camera,ra:tick*.05},viewport);projectAtlas(s.ra,s.dec,{...camera,zoom:1+tick*.01},viewport);}}assert.equal(JSON.stringify([...byId]),before);});
 test('coordinate formatting includes hemisphere and wrapped hours',()=>{assert.equal(formatRA(TAU),'00h 00m');assert.equal(formatDec(-10*RAD),'−10.0°');assert.equal(formatDec(20*RAD),'+20.0°');});
+
+test('hand panning moves the view in both projections without mutating camera or star positions',()=>{
+ const original=JSON.stringify(camera),source=Object.freeze({ra:.1,dec:.1});
+ for(const mode of ['sphere','atlas']){const project=mode==='sphere'?projectSphere:projectAtlas,before=project(source.ra,source.dec,camera,viewport),next=panSky(camera,mode,viewport,.02,.03),after=project(source.ra,source.dec,next,viewport);assert.ok(after.x>before.x&&after.y>before.y);near(source.ra,.1);near(source.dec,.1);}
+ assert.equal(JSON.stringify(camera),original);const edge=panSky({...camera,ra:TAU-.001,dec:84*RAD},'sphere',viewport,.1,.5);assert.ok(edge.ra>=0&&edge.ra<TAU);near(edge.dec,85*RAD);
+});
+test('fist selection uses the visible reticle neighborhood and never selects behind the camera',()=>{
+ const mansions=[{id:0,center:{ra:Math.PI,dec:0},members:[]},{id:1,center:{ra:.2,dec:0},members:[]},{id:2,center:{ra:.04,dec:0},members:[]}];
+ assert.equal(nearestMansion(mansions,(ra,dec)=>projectSphere(ra,dec,camera,viewport),viewport),2);
+ assert.equal(nearestMansion(mansions.slice(0,1),(ra,dec)=>projectSphere(ra,dec,camera,viewport),viewport),null);
+ const seam={...camera,ra:TAU-.01};assert.equal(nearestMansion(mansions,(ra,dec)=>projectAtlas(ra,dec,seam,viewport),viewport),2);
+});
