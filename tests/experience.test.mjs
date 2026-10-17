@@ -34,7 +34,7 @@ test('worker startup failure falls back to compatible recognition and releases i
 test('lower inference rates still select and morph without a long confirmation delay',()=>{const m=new GestureMachine();const events=[];for(let t=0;t<=600;t+=200){const e=m.update(sample('fist'),t,state);if(e)events.push(e);}assert.deepEqual(events,[{type:'select'}]);assert.equal(m.update(sample('open'),800,state),null);assert.deepEqual(m.update(sample('open'),1000,state),{type:'morph',selected:3});});
 
 test('wind field affects only its screen displacement, then returns to zero',()=>{const stars=Object.freeze([{ra:2,dec:.5}]),before=JSON.stringify(stars);const field=new WindField();field.push({x:.5,y:.5,dx:1,dy:.2},0);field.prepare(400);assert.ok(field.offset(500,400,1000,800)[0]>0);field.prepare(4000);assert.deepEqual(field.offset(500,400,1000,800),[0,0]);assert.equal(JSON.stringify(stars),before);});
-test('morph timeline progresses through gather, hold, return and cooldown',()=>{const t=new MorphTimeline();assert.equal(t.start(0),true);assert.ok(t.sample(1400).amount>.2);assert.equal(t.sample(4000).state,'HOLDING');assert.equal(t.sample(6800).state,'RETURNING');assert.equal(t.sample(8200).done,true);assert.equal(t.start(8300),false);assert.equal(t.start(9500),true);});
+test('morph timeline progresses through gather, hold, return and cooldown',()=>{const t=new MorphTimeline();assert.equal(t.start(0),true);assert.ok(t.sample(1400).amount>.2);assert.equal(t.sample(4000).state,'HOLDING');assert.equal(t.sample(7500).state,'RETURNING');assert.equal(t.sample(9500).done,true);assert.equal(t.start(9600),false);assert.equal(t.start(10800),true);});
 test('early termination returns smoothly from partial gathering',()=>{const t=new MorphTimeline();t.start(0);const a=t.sample(1000).amount;t.finish(1000);assert.ok(Math.abs(t.sample(1000).amount-a)<1e-10);assert.ok(t.sample(1800).amount<a);assert.equal(t.sample(3400).done,true);});
 
 test('GPU upload preserves source coordinates and normalized colors without changing the input cloud',()=>{
@@ -48,10 +48,31 @@ test('GPU transitions issue a single draw per frame with no per-frame point-buff
  const calls={draws:0,uploads:0},gl=new Proxy({canvas:null,getUniformLocation(){return {};},drawArrays(){calls.draws++;},bufferData(){calls.uploads++;}}, {get:(object,key)=>key in object?object[key]:(()=>{})});
  const stage=new StatueStage();stage.gl=gl;stage.program={};stage.uniforms={};stage.canvas={width:0,height:0,style:{}};stage.particleCount=144000;stage.origin={x:400,y:300};stage.timeline.start(0);stage.animationStarted=0;stage.lastDraw=0;
  const prior=globalThis.devicePixelRatio;globalThis.devicePixelRatio=1;
- try{for(let t=16;t<=2600;t+=16)stage.draw(null,t,1000,800,null);assert.equal(calls.draws,162);assert.equal(calls.uploads,0);assert.equal(stage.occludesSky,true);stage.finish(2600);for(let t=2616;t<=5000;t+=16)stage.draw(null,t,1000,800,null);assert.equal(stage.busy,false);assert.equal(stage.canvas.hidden,true);assert.equal(stage.occludesSky,false);}finally{if(prior===undefined)delete globalThis.devicePixelRatio;else globalThis.devicePixelRatio=prior;}
+ try{for(let t=16;t<=2600;t+=16)stage.draw(null,t,1000,800,null);assert.equal(calls.draws,162);assert.equal(calls.uploads,0);assert.equal(stage.occludesSky,true);stage.finish(2600);for(let t=2616;t<=5020;t+=16)stage.draw(null,t,1000,800,null);assert.equal(stage.busy,false);assert.equal(stage.canvas.hidden,true);assert.equal(stage.occludesSky,false);}finally{if(prior===undefined)delete globalThis.devicePixelRatio;else globalThis.devicePixelRatio=prior;}
 });
 
-test('the statue always returns automatically after roughly four seconds of full formation',()=>{const t=new MorphTimeline();t.start(0);assert.equal(t.sample(2199).state,'GATHERING');assert.equal(t.sample(2200).state,'HOLDING');assert.equal(t.sample(6399).state,'HOLDING');assert.equal(t.sample(6400).state,'RETURNING');assert.equal(t.sample(8100).done,true);assert.equal(t.busy,false);});
+test('the statue always returns automatically after roughly four seconds of full formation',()=>{const t=new MorphTimeline();t.start(0);assert.equal(t.sample(2799).state,'GATHERING');assert.equal(t.sample(2800).state,'HOLDING');assert.equal(t.sample(6999).state,'HOLDING');assert.equal(t.sample(7000).state,'RETURNING');assert.equal(t.sample(9400).done,true);assert.equal(t.busy,false);});
 
 test('all 28 authorized clouds match the astronomical mansion ids and decode to valid colored points',async()=>{const pack=JSON.parse(await readFile(new URL('../dist/data/statues.json',import.meta.url),'utf8'));const ms=JSON.parse(await readFile(new URL('../dist/data/mansions.json',import.meta.url),'utf8'));assert.equal(pack.items.length,28);for(const [i,item] of pack.items.entries()){assert.equal(item.id,i);assert.equal(item.name,ms[i].name);assert.ok(item.count>=20000&&item.count<=48000);const pts=decodeCloud(item);assert.equal(pts.length,item.count);assert.ok(new Set(pts.slice(0,100).map(p=>p.r)).size>10);for(const p of pts){assert.ok(Math.abs(p.x)<1&&Math.abs(p.y)<=.51&&Math.abs(p.z)<.3);assert.ok(p.r>=0&&p.r<=255);}}});
 test('bundled MediaPipe model matches the recorded SHA-256',async()=>{const folder=new URL('../dist/vendor/mediapipe/',import.meta.url),meta=JSON.parse(await readFile(new URL('provenance.json',folder),'utf8')),bytes=await readFile(new URL('hand_landmarker.task',folder));assert.ok(bytes.length>1000000);assert.equal(createHash('sha256').update(bytes).digest('hex'),meta.modelSha256);assert.equal(meta.version,'1.1.1');});
+
+test('entry and exit meet the held shape with zero endpoint velocity',()=>{
+ const t=new MorphTimeline();t.start(0);const entry=t.duration.gather,exit=entry+t.duration.hold,end=exit+t.duration.return;
+ const before=t.sample(entry-1),at=t.sample(entry),leaving=t.sample(exit+1);
+ assert.ok(1-before.amount<1e-7);assert.equal(at.amount,1);assert.ok(1-leaving.amount<1e-7);assert.equal(leaving.formation,1);assert.ok(leaving.release>0);
+ const almost=t.sample(end-1);assert.ok(almost.amount<1e-7);assert.equal(t.sample(end).done,true);
+});
+test('an early return preserves the current shape and releases it rather than rewinding its gathering',()=>{
+ for(const time of [100,900,2000,4000]){const t=new MorphTimeline();t.start(0);const entry=t.sample(time);t.finish(time);const initial=t.sample(time),later=t.sample(time+600);assert.equal(initial.formation,entry.formation);assert.equal(initial.release,0);assert.equal(initial.amount,entry.amount);assert.equal(later.formation,entry.formation);assert.ok(later.release>0);assert.ok(later.amount<=initial.amount);}
+});
+test('late finish still delivers the completion event to the next display frame',()=>{
+ const t=new MorphTimeline();t.start(0);t.finish(10000);assert.equal(t.busy,false);assert.equal(t.sample(10001).done,true);assert.equal(t.sample(10002).done,false);
+});
+test('a ripple pushes only decorative particles outward and expires without a residual displacement',()=>{
+ const field=new WindField(),stars=Object.freeze([{ra:1.2,dec:-.3}]),before=JSON.stringify(stars);field.ripple({x:.5,y:.5},0);field.prepare(600);const a=field.offset(500+600*.6*.33,300,1000,600),b=field.offset(500-600*.6*.33,300,1000,600);assert.ok(a[0]>5);assert.ok(b[0]<-5);assert.ok(Math.abs(a[1])<1e-8);field.prepare(2600);assert.deepEqual(field.offset(620,300,1000,600),[0,0]);assert.equal(JSON.stringify(stars),before);
+});
+test('particle interaction is smoothed and keeps a bounded ripple history',()=>{
+ const stage=new StatueStage(),gl=new Proxy({}, {get:()=>()=>{}});stage.gl=gl;stage.program={};stage.uniforms={};stage.canvas={width:0,height:0,style:{}};stage.origin={x:500,y:300};stage.timeline.start(0);stage.lastDraw=3500;stage.animationStarted=0;
+ const prior=globalThis.devicePixelRatio;globalThis.devicePixelRatio=1;
+ try{stage.interact(1,0,3500,1);stage.draw(null,3516,1000,600,null);assert.ok(stage.pointer.x>0&&stage.pointer.x<.3);assert.ok(stage.pointer.y<0&&stage.pointer.y>-.3);for(let i=1;i<10;i++)stage.interact(.5,.5,3500+i*300,1);assert.equal(stage.ripples.length,3);stage.draw(null,9000,1000,600,null);assert.equal(stage.ripples.length,0);}finally{if(prior===undefined)delete globalThis.devicePixelRatio;else globalThis.devicePixelRatio=prior;}
+});

@@ -1,12 +1,12 @@
-import {GestureMachine,HandNavigator} from './gesture-core.js?v=9';
-import {GestureCamera} from './gesture-camera.js?v=9';
-import {WindField,StatueStage} from './particle-effects.js?v=9';
+import {GestureMachine,HandNavigator} from './gesture-core.js?v=10';
+import {GestureCamera} from './gesture-camera.js?v=10';
+import {WindField,StatueStage} from './particle-effects.js?v=10';
 export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new GestureCamera(video,callbacks),stageFactory=()=>new StatueStage()}={}){
  const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator();
- let pack=null,packError=null,restoring=null,lastPhase='',windDrag=null,lastManualWind=-9999,lastSample=0,modelState='off',sampleCount=0,preparing=false,warmTask=null,lastCandidate=null,lastHud='',lastCountdown=-1,lastHandCount=0,resumeAfterPageShow=false;
+ let pack=null,packError=null,restoring=null,lastPhase='',windDrag=null,lastManualWind=-9999,lastSample=0,modelState='off',sampleCount=0,preparing=false,warmTask=null,lastCandidate=null,lastHud='',lastCountdown=-1,lastHandCount=0,resumeAfterPageShow=false,lastHand=null,lastPointer=null;
  const states={IDLE:'伸出单手，移手环顾',NAVIGATING:'移手环顾 · 握拳点亮',FIST_ARMING:'握拳锁定…',FIST_READY:'已点亮 · 张掌化形',OPENING:'张掌化形…',COOLDOWN:'移手继续探索',LOST:'请将一只手放入画面',BLOCKED:'彩塑展示中 · 即将自动返回'};
  document.body.insertAdjacentHTML('beforeend',`<div class="experience-actions"><button id="gesture-toggle" aria-expanded="false">◌ 手势交互</button><button id="morph-trigger">✧ 粒子化形</button></div>
- <section class="gesture-panel" id="gesture-panel" hidden aria-label="手势控制"><div class="gesture-panel-head"><strong>以手，环顾星空</strong><button id="gesture-close" aria-label="收起手势面板">×</button></div><p>移手带动星空，将星宿移近中央准星。握拳点亮，再张掌化形；成形约 4 秒后自动返回。</p><video id="hand-video" autoplay muted playsinline aria-label="本机镜像摄像头预览"></video><canvas id="hand-overlay" aria-hidden="true"></canvas><div class="gesture-meter"><span id="gesture-pose">正在接入摄像头</span><progress id="gesture-progress" max="1" value="0" aria-label="握拳张掌进度"></progress></div><p id="camera-status" role="status" aria-live="polite">首次进入时请允许摄像头。视频仅在本机处理，不上传、不录制。</p><div class="gesture-buttons"><button id="camera-start">开启摄像头</button><button id="camera-stop" disabled>关闭摄像头</button></div><button id="manual-wind">↝ 推动星尘 <kbd>W</kbd></button><p class="camera-note">收起面板仍可交互。双手入镜或丢手会重置手势。备选：鼠标拖动环顾，M 化形，Esc 返回。</p></section>
+ <section class="gesture-panel" id="gesture-panel" hidden aria-label="手势控制"><div class="gesture-panel-head"><strong>以手，环顾星空</strong><button id="gesture-close" aria-label="收起手势面板">×</button></div><p>移手带动星空，将星宿移近中央准星。握拳点亮，再张掌化形；成形约 4 秒后自动返回。成形时移手或鼠标轻触，光粒会回应。</p><video id="hand-video" autoplay muted playsinline aria-label="本机镜像摄像头预览"></video><canvas id="hand-overlay" aria-hidden="true"></canvas><div class="gesture-meter"><span id="gesture-pose">正在接入摄像头</span><progress id="gesture-progress" max="1" value="0" aria-label="握拳张掌进度"></progress></div><p id="camera-status" role="status" aria-live="polite">首次进入时请允许摄像头。视频仅在本机处理，不上传、不录制。</p><div class="gesture-buttons"><button id="camera-start">开启摄像头</button><button id="camera-stop" disabled>关闭摄像头</button></div><button id="manual-wind">↝ 推动星尘 <kbd>W</kbd></button><p class="camera-note">收起面板仍可交互。双手入镜或丢手会重置手势。备选：鼠标拖动环顾，M 化形，Esc 返回。</p></section>
  <div id="gesture-hud" class="gesture-hud" hidden><span class="live-dot"></span><span id="gesture-hint" role="status" aria-live="polite">正在接入摄像头…</span><progress id="gesture-hud-progress" max="1" value="0" aria-label="手势操作进度"></progress></div>
  <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><div class="stage-title"><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture</span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
  function warmSelected(){
@@ -26,15 +26,20 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
  function refreshHud(){let text=lastHandCount>1?'请只保留一只手':states[machine.state]||states.IDLE;if(machine.armed)text+=' · '+adapter.selected().name+'宿';else if(machine.state==='NAVIGATING'&&lastCandidate!==null)text+=' '+adapter.mansionName(lastCandidate)+'宿';ui('gesture-pose').textContent=text;hud(text);}
  const camera=cameraFactory(ui('hand-video'),{onStatus:status,onSample:(sample,timestamp,landmarks,handCount)=>{
   lastSample=timestamp;sampleCount++;lastHandCount=handCount;if(handCount>1)sample=null;
+  let handSpeed=0;if(sample&&lastHand){const dt=(timestamp-lastHand.t)/1000,travel=Math.hypot(sample.palm.x-lastHand.x,sample.palm.y-lastHand.y);if(dt>0&&dt<.4&&travel<.18)handSpeed=travel/dt;}
+  lastHand=sample?{...sample.palm,t:timestamp}:null;
+  if(stage.busy&&sample)stage.interact?.(sample.palm.x,sample.palm.y,timestamp,handSpeed*1.7);
   const previous=machine.state,event=machine.update(sample,timestamp,{selected:adapter.selected().id,busy:stage.busy||preparing||adapter.blocked()||document.hidden,enabled:camera.running});
   if(sample?.pose==='fist'&&previous!=='FIST_ARMING'&&previous!=='FIST_READY')adapter.stopNavigation();
   if(event?.type==='select'){
    const id=adapter.selectNearest();machine.confirmSelection(id);navigator.reset();warmSelected();
+   const point=adapter.selectionPoint?.();if(id!==null&&point&&!adapter.reducedMotion)wind.ripple({...point,strength:1.1},timestamp);
    if(id!==null)adapter.notice(adapter.selected().name+'宿已点亮 · 张掌化形');else adapter.notice('请将星宿移到画面中央，再握拳');
   }
   if(event?.type==='morph')morph();
   const canMove=camera.running&&!stage.busy&&!preparing&&!adapter.blocked()&&!document.hidden&&!machine.armed&&sample?.pose==='open';
   navigator.feed(canMove?sample:null,timestamp);
+  if(canMove&&handSpeed>.06&&!adapter.reducedMotion){const p=adapter.handScreen?.(sample.palm)||sample.palm;wind.stir({x:p.x,y:p.y,dx:navigator.target.x*2,dy:navigator.target.y*2},timestamp);}
   refreshHud();
   if(!ui('gesture-panel').hidden)drawHand(landmarks);
  }});
@@ -55,7 +60,13 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
  function returnToSky(){stage.finish(performance.now());}
  ui('gesture-toggle').onclick=()=>panel(ui('gesture-panel').hidden);ui('gesture-close').onclick=()=>panel(false);ui('camera-start').onclick=()=>camera.start();ui('camera-stop').onclick=()=>camera.stop();ui('manual-wind').onclick=()=>manualWind();ui('morph-trigger').onclick=morph;ui('stage-return').onclick=returnToSky;
  document.addEventListener('keydown',event=>{if(adapter.blocked()||event.ctrlKey||event.metaKey||event.altKey||['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName))return;const key=event.key.toLowerCase();if(key==='escape'&&stage.busy){event.preventDefault();returnToSky();}if(event.repeat)return;if(key==='w'){event.preventDefault();manualWind(event.shiftKey?-1:1);}if(key==='m'){event.preventDefault();morph();}});
- document.addEventListener('pointermove',event=>{if(stage.busy){stage.pointer.x=(event.clientX/innerWidth-.5)*2;stage.pointer.y=(event.clientY/innerHeight-.5)*2;}});
+ document.addEventListener('pointermove',event=>{
+  const now=performance.now(),x=event.clientX/innerWidth,y=event.clientY/innerHeight;let dx=0,dy=0;
+  if(lastPointer){const dt=Math.max(.016,(now-lastPointer.t)/1000);dx=(x-lastPointer.x)/dt;dy=(y-lastPointer.y)/dt;}lastPointer={x,y,t:now};
+  if(stage.busy){stage.interact(x,y,now,Math.min(1.2,Math.hypot(dx,dy)*.9));return;}
+  if(event.target.id==='sky'&&!adapter.blocked()&&!adapter.reducedMotion&&Math.hypot(dx,dy)>.08)wind.stir({x,y,dx:dx*.75,dy:dy*.75},now);
+ });
+ document.addEventListener('pointerdown',event=>{if(event.target.id!=='sky'||adapter.reducedMotion)return;const now=performance.now(),x=event.clientX/innerWidth,y=event.clientY/innerHeight;if(stage.busy)stage.interact(x,y,now,1.3);else wind.ripple({x,y},now);});
  document.addEventListener('visibilitychange',()=>{navigator.reset();machine.reset(performance.now());camera.suspended=document.hidden||stage.busy;if(document.hidden&&stage.busy)returnToSky();});window.addEventListener('pagehide',()=>{resumeAfterPageShow=camera.running||camera.starting;camera.stop();});window.addEventListener('pageshow',event=>{if(event.persisted&&resumeAfterPageShow){resumeAfterPageShow=false;camera.start();}});
  // Exactly one automatic request per document. Panel and morph transitions reuse the stream.
  queueMicrotask(()=>camera.start());
@@ -64,14 +75,14 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
   get navigating(){return camera.running&&machine.state==='NAVIGATING'&&!stage.busy;},
   get occludesSky(){return stage.occludesSky;},
   beforeFrame(now){
-   camera.suspended=stage.busy||preparing||adapter.blocked()||document.hidden;wind.prepare(now);
-   if(camera.suspended){navigator.reset();machine.reset(now,'BLOCKED');return;}
+   camera.suspended=(stage.busy&&stage.timeline.state!=='HOLDING')||preparing||adapter.blocked()||document.hidden;wind.prepare(now);
+   if(camera.suspended||stage.busy){navigator.reset();machine.reset(now,'BLOCKED');return;}
    if(camera.running&&now-lastSample>Math.max(650,camera.inferenceMs*3)){machine.reset(now,'LOST');navigator.reset();hud(states.LOST);}
    const motion=navigator.step(now);if(motion.dx||motion.dy)adapter.pan(motion.dx,motion.dy);
    if(camera.running){lastCandidate=adapter.nearest();refreshHud();}
   },
   offset(x,y,w,h){return wind.offset(x,y,w,h);},
-  draw(context,now,w,h,anchor,reduced){const sample=stage.draw(context,now,w,h,anchor,reduced);if(stage.busy&&sample.state!==lastPhase){lastPhase=sample.state;ui('stage-phase').textContent={GATHERING:'星子汇聚',HOLDING:'彩塑成形',RETURNING:'重返星空'}[sample.state]||'';}if(stage.busy){const remaining=sample.hold?Math.ceil((stage.timeline.started+stage.timeline.duration.gather+stage.timeline.duration.hold-now)/1000):-1;if(remaining!==lastCountdown||sample.state!=='HOLDING'){lastCountdown=remaining;ui('stage-countdown').textContent=sample.hold?remaining+' 秒后回到星空':sample.state==='RETURNING'?'星子归位，即将继续探索':'成形后自动返回星空';}}if(sample.done){document.body.classList.remove('morphing');document.querySelector('main').inert=false;document.querySelector('.bottom-panel').inert=false;ui('statue-stage-ui').hidden=true;ui('morph-trigger').disabled=false;ui('morph-trigger').focus({preventScroll:true});adapter.restore(restoring);navigator.reset();machine.reset(now);machine.cooldownUntil=now+700;restoring=null;lastPhase='';hud('已回到星空 · 移手继续探索');adapter.notice('已回到星空 · 移手继续探索');}},
+  draw(context,now,w,h,anchor,reduced){const sample=stage.draw(context,now,w,h,anchor,reduced),presence=sample.amount||0;document.body.style.setProperty('--stage-presence',String(presence));document.body.style.setProperty('--stage-sky-opacity',String(1-presence*.82));document.body.style.setProperty('--stage-scale',String(1+presence*.035));if(context&&!reduced&&!stage.busy)wind.draw(context,w,h);if(stage.busy&&sample.state!==lastPhase){lastPhase=sample.state;ui('stage-phase').textContent={GATHERING:'星光入梦',HOLDING:'星神呼吸',RETURNING:'流光归野'}[sample.state]||'';}if(stage.busy){const remaining=sample.hold?Math.ceil((stage.timeline.started+stage.timeline.duration.gather+stage.timeline.duration.hold-now)/1000):-1;if(remaining!==lastCountdown||sample.state!=='HOLDING'){lastCountdown=remaining;ui('stage-countdown').textContent=sample.hold?remaining+' 秒后回到星空':sample.state==='RETURNING'?'流光散回星空':'成形后自动返回星空';}}if(sample.done){document.body.classList.remove('morphing');document.querySelector('main').inert=false;document.querySelector('.bottom-panel').inert=false;ui('statue-stage-ui').hidden=true;ui('morph-trigger').disabled=false;ui('morph-trigger').focus({preventScroll:true});adapter.restore(restoring);navigator.reset();machine.reset(now);machine.cooldownUntil=now+700;restoring=null;lastPhase='';hud('已回到星空 · 移手继续探索');adapter.notice('已回到星空 · 移手继续探索');}},
   pointerCancel(){windDrag=null;},
   pointerDown(event){if(stage.busy)return true;if(event.shiftKey){windDrag={x:event.clientX,y:event.clientY,t:performance.now(),lastX:event.clientX,lastY:event.clientY};event.currentTarget.setPointerCapture(event.pointerId);return true;}return false;},
   pointerMove(event){if(stage.busy)return true;if(!windDrag)return false;windDrag.lastX=event.clientX;windDrag.lastY=event.clientY;return true;},
