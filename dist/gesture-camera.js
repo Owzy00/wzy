@@ -1,4 +1,4 @@
-import {describeHand} from './gesture-core.js';
+import {describeHand} from './gesture-core.js?v=8';
 export function createHandWorker(){
  if(globalThis.XINGYE_WORKER_SOURCE){const url=URL.createObjectURL(new Blob([globalThis.XINGYE_WORKER_SOURCE],{type:'text/javascript'}));const worker=new Worker(url,{type:'module'});URL.revokeObjectURL(url);return worker;}
  return new Worker(new URL('./hand-worker.js',import.meta.url),{type:'module'});
@@ -37,7 +37,7 @@ export class GestureCamera{
    if(generation!==this.generation)return;
    this.running=true;this.starting=false;this.busy=false;
    if(this.worker){this.worker.onmessage=({data})=>{if(generation!==this.generation)return;this.busy=false;if(data.type==='result'){this.received++;this.inferenceMs=data.inferenceMs;this.onSample(describeHand(data.landmarks,data.confidence,data.handCount),performance.now(),data.landmarks,data.handCount);}else if(data.type==='error'){this.stop();this.onStatus('error','识别中断：'+data.message);}};this.worker.onerror=event=>{const message=event.message||'识别线程运行中断';this.stop();this.onStatus('error',message);};}
-   this.onStatus('running',this.backend==='main'?'兼容识别已开启 · 请将一只手放入画面。':'识别已开启 · 请将一只手放入画面。');this.loop(generation);
+   this.onStatus('running',this.backend==='main'?'兼容识别已开启 · 请将一只手放入画面，先握拳再张掌。':'识别已开启 · 请将一只手放入画面。');this.loop(generation);
   }catch(error){if(generation!==this.generation)return;const detail=this.workerError;this.stop();const message=error.name==='NotAllowedError'?'摄像头未获授权：请点击地址栏左侧的权限图标，允许此网页使用摄像头后重试。':error.name==='NotFoundError'?'未找到摄像头，请连接摄像头后重试。':error.name==='NotReadableError'?'摄像头被其他程序占用或无法读取，请关闭其他视频程序后重试。':error.message+(detail?'；线程错误：'+detail:'');this.onStatus('error',message);}
  }
  async loop(generation){
