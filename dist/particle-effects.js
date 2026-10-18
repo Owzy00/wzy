@@ -1,4 +1,4 @@
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence} from './cloud-field.js?v=13';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=14';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -65,10 +65,10 @@ uniform vec4 uRipple0,uRipple1,uRipple2;
 varying vec3 vColor;varying float vAlpha,vSpark;
 ${CLOUD_GLSL}
 vec2 wake(vec2 p,vec4 ripple){
- if(ripple.w<.001)return vec2(0.);
+ if(ripple.w<.001||ripple.z<=0.||ripple.z>=2.5)return vec2(0.);
  float dim=min(uViewport.x,uViewport.y),radius=ripple.z*dim*.36;
  vec2 d=p-ripple.xy*uViewport;float edge=(length(d)-radius)/(dim*.04);
- return d/max(1.,length(d))*exp(-edge*edge)*exp(-ripple.z*1.7)*ripple.w*dim*.027;
+ return d/max(1.,length(d))*exp(-edge*edge)*exp(-ripple.z*1.7)*ripple.w*dim*.045*smoothstep(0.,.10,ripple.z)*(1.-smoothstep(2.1,2.5,ripple.z));
 }
 void main(){
  // Explicit morphing still has a quiet, changing flow under reduced motion.
@@ -83,8 +83,11 @@ void main(){
  vec2 center=mix(uOrigin,uLayout.xy,smoothstep(0.,.18,uAmount));
  vec2 pos=center+p.xy*uLayout.z*zoom*perspective;
  pos+=uPointer*vec2(46.,16.)*settle*(1.-uRelease)*motion;
- float freeMotion=mix((1.-settle)*(1.-settle),1.,loose);
- pos+=(wake(pos,uRipple0)+wake(pos,uRipple1)+wake(pos,uRipple2))*freeMotion*motion;
+ float heldWave=smoothstep(.96,1.,uFormation)*(1.-smoothstep(0.,.22,uRelease));
+ float freeMotion=max(mix((1.-settle)*(1.-settle),1.,loose),heldWave);
+ vec2 disturbance=wake(pos,uRipple0)+wake(pos,uRipple1)+wake(pos,uRipple2);
+ disturbance*=min(1.,min(uViewport.x,uViewport.y)*.07/max(.001,length(disturbance)));
+ pos+=disturbance*freeMotion*motion;
  float glint=.90+.10*sin(uTime*1.4+aSeed.x*24.);
  float visibility=smoothstep(0.,.10,uAmount)*(1.-smoothstep(.65,1.,uRelease));
  float layer=mix(1.,.76,aFlow);
@@ -139,7 +142,7 @@ export class StatueStage{
  }
  start(item,now){
   if(this.busy||now<this.timeline.cooldownUntil)return false;
-  this.initRenderer();this.item=item;const prepared=this.prepare(item);this.points=prepared.points;this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
+  this.initRenderer();this.item=item;const prepared=this.prepare(item);this.points=prepared.points;this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
   const packed=prepared.packed;this.particleCount=packed.count;
   if(this.gl){this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.buffer);this.gl.bufferData(this.gl.ARRAY_BUFFER,packed.data,this.gl.STATIC_DRAW);}else this.prepareFallback();
   // Decode/upload before starting the clock so the first frame never skips ahead.
@@ -148,7 +151,7 @@ export class StatueStage{
  finish(now){this.timeline.finish(now);}
  interact(x,y,now,strength=0){
   this.pointerTarget={x:(clamp01(x)-.5)*2,y:(clamp01(y)-.5)*2};
-  if(strength>.18&&now-this.lastRipple>260){this.lastRipple=now;this.ripples.push({x:clamp01(x),y:clamp01(y),time:now,strength:Math.min(1.4,strength)});this.ripples=this.ripples.slice(-3);}
+  if(this.timeline.state==='HOLDING'&&strength>.18&&now-this.lastRipple>260){this.lastRipple=now;this.ripples.push({x:clamp01(x),y:clamp01(y),time:now,strength:Math.min(1.4,strength)});this.ripples=this.ripples.slice(-3);}
  }
 
  prepareFallback(){
@@ -159,36 +162,38 @@ export class StatueStage{
   for(let i=0;i<count;i++){const index=Math.floor(i*packed.count/count),o=index*10,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
    this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:data[o+9]>.5&&seed.z>=.89});
   }
-  this.fallbackPose={};this.fallbackPalette=Array.from({length:12},(_,i)=>`rgb(${138+i*9},${102+i*9},${56+i*8})`);
+  this.fallbackPose={};this.fallbackDisplacement={};this.fallbackPalette=Array.from({length:12},(_,i)=>`rgb(${138+i*9},${102+i*9},${56+i*8})`);
  }
  drawFallback(l,now,sample,reduced){
   const c=this.context;c.clearRect(0,0,l.width,l.height);
   const time=(now-this.animationStarted)/1000,motion=reduced?.18:1,solid=smooth((sample.formation-.62)/.38)*(1-sample.release);
   const centerEase=smooth(sample.presence/.18),cx=this.origin.x*(1-centerEase)+l.cx*centerEase,cy=this.origin.y*(1-centerEase)+l.cy*centerEase;
   const zoom=1.75-.75*smooth((sample.formation-.12)/.83),p=this.fallbackPose;
+  const waves=prepareRippleWaves(this.ripples,now,l.width,l.height),heldWave=smooth((sample.formation-.96)/.04)*(1-smooth(sample.release/.22)),disturbed=rippleActivity(this.ripples,now)*heldWave;
   for(let group=0;group<12;group++){
    c.fillStyle=this.fallbackPalette[group];
    for(const particle of this.fallbackGroups[group]){
-    if(solid>.95&&!particle.loose)continue;
-    cloudPose(particle.target,particle.seed,time,sample.formation,sample.release,particle.loose,motion,p);
+    if(solid>.95&&!particle.loose&&disturbed<.005)continue;
+    if(sample.hold&&!particle.loose){const breath=1+Math.sin(time*1.22)*.004*motion;p.x=particle.target.x*breath;p.y=particle.target.y*breath;p.z=particle.target.z;}else cloudPose(particle.target,particle.seed,time,sample.formation,sample.release,particle.loose,motion,p);
     const settled=cloudSettle(particle.seed,sample.formation),perspective=1/(1+p.z*.32*(1-settled));
-    const x=cx+p.x*l.size*zoom*perspective+this.pointer.x*46*settled*(1-sample.release)*motion;
-    const y=cy+p.y*l.size*zoom*perspective+this.pointer.y*16*settled*(1-sample.release)*motion;
-    c.globalAlpha=sample.presence*(1-smooth((sample.release-.65)/.35))*(particle.loose?.19:(.38+.28*settled)*(1-solid*.85));
-    const size=(.75+particle.seed.z*.55)*perspective;c.fillRect(x,y,size,size);
+    let x=cx+p.x*l.size*zoom*perspective+this.pointer.x*46*settled*(1-sample.release)*motion;
+    let y=cy+p.y*l.size*zoom*perspective+this.pointer.y*16*settled*(1-sample.release)*motion;
+    if(waves.length){const d=rippleDisplacement(x,y,waves,Math.min(l.width,l.height)*.07,this.fallbackDisplacement),amount=Math.max(particle.loose?1:(1-settled)**2,heldWave)*motion;x+=d.x*amount;y+=d.y*amount;}
+    c.globalAlpha=sample.presence*(1-smooth((sample.release-.65)/.35))*(particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));
+    const size=(.75+particle.seed.z*.55)*perspective*(1+disturbed*.55);c.fillRect(x,y,size,size);
    }
   }
   const size=l.size*(1+Math.sin(time*1.22)*.004*motion);
-  c.globalAlpha=solid;c.drawImage(this.body,l.cx-size/2+this.pointer.x*46*motion,l.cy-size/2+this.pointer.y*16*motion,size,size);c.globalAlpha=1;
+  c.globalAlpha=solid*(1-disturbed);c.drawImage(this.body,l.cx-size/2+this.pointer.x*46*motion,l.cy-size/2+this.pointer.y*16*motion,size,size);c.globalAlpha=1;
  }
  draw(ctx,now,width,height,anchor,reduced=false){
   const started=performance.now(),frameDelta=Math.max(0,Math.min(60,now-this.lastDraw));if(this.busy&&this.lastDraw){const dt=now-this.lastDraw;if(dt>0){this.intervals.push(dt);if(this.intervals.length>180)this.intervals.shift();}}this.lastDraw=now;
   const sample=this.timeline.sample(now);
-  sample.presence=cloudPresence(sample.formation||0)*(1-(sample.release||0));if(sample.done){this.ripples=[];if(this.canvas){this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
+  sample.presence=cloudPresence(sample.formation||0)*(1-(sample.release||0));if(sample.done){this.ripples=[];if(this.canvas){this.canvas.setAttribute?.('data-active-ripples','0');this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
   const phase=sample.release>0?'release':sample.formation<.08?'emerging':sample.formation<.3?'cloud':sample.formation<.9?'silhouette':'formed';if(this.phase!==phase){this.phase=phase;this.canvas.setAttribute?.('data-phase',phase);this.canvas.setAttribute?.('data-phase-time',String(Math.round((now-this.animationStarted)/10)/100));}const l=this.layout(width,height);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
   const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
   this.opacity=sample.presence;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
-  this.ripples=this.ripples.filter(r=>now-r.time<2500);
+  this.ripples=this.ripples.filter(r=>now-r.time<2500);this.canvas.setAttribute?.('data-active-ripples',String(this.ripples.length));
   if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
   else{this.context.setTransform(dpr,0,0,dpr,0,0);this.drawFallback(l,now,sample,reduced);}
   this.frameMs=performance.now()-started;

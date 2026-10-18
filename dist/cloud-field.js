@@ -4,6 +4,24 @@ const cloudClamp=x=>Math.max(0,Math.min(1,x));
 const cloudSmooth=x=>{x=cloudClamp(x);return x*x*(3-2*x);};
 export function cloudSettle(seed,formation){const start=.08+seed.y*.18+seed.z*.08,end=.66+seed.y*.30;return cloudSmooth((formation-start)/(end-start));}
 export function cloudPresence(amount){return cloudSmooth(amount/.10);}
+// Analytic waves displace visual particles from their immutable targets, then vanish.
+export function prepareRippleWaves(ripples,now,width,height){
+ const dim=Math.min(width,height),waves=[];
+ for(const r of ripples.slice(-3)){
+  const age=(now-r.time)/1000;if(age<=0||age>=2.5)continue;
+  waves.push({x:r.x*width,y:r.y*height,radius:age*dim*.36,edge:dim*.04,
+   force:cloudSmooth(age/.10)*Math.exp(-age*1.7)*r.strength*dim*.045*(1-cloudSmooth((age-2.1)/.4))});
+ }
+ return waves;
+}
+export function rippleDisplacement(x,y,waves,limit,out={}){
+ let dx=0,dy=0;
+ for(const wave of waves){const x0=x-wave.x,y0=y-wave.y,d=Math.hypot(x0,y0),edge=(d-wave.radius)/wave.edge,force=Math.exp(-edge*edge)*wave.force/Math.max(1,d);dx+=x0*force;dy+=y0*force;}
+ const scale=Math.min(1,limit/Math.max(.001,Math.hypot(dx,dy)));out.x=dx*scale;out.y=dy*scale;return out;
+}
+export function rippleActivity(ripples,now){
+ let activity=0;for(const r of ripples){const age=(now-r.time)/1000;if(age>0&&age<2.5)activity=Math.max(activity,cloudSmooth(age/.10)*Math.exp(-age*.8)*Math.min(1,r.strength)*(1-cloudSmooth((age-2.1)/.4)));}return activity;
+}
 export function cloudField(seed,time,motion=1,out={}){
  const t=time*.75*motion,u=(seed.x-.5)*2.6,v=(seed.y-.5)*1.7;
  const a=u*2.8+v*1.9-t*.94,b=v*5.1-u*1.65+t*.71;

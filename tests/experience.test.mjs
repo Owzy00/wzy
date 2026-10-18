@@ -1,4 +1,4 @@
-import {cloudField,cloudPose,cloudPresence} from '../dist/cloud-field.js';
+import {cloudField,cloudPose,cloudPresence,prepareRippleWaves,rippleDisplacement} from '../dist/cloud-field.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -73,9 +73,9 @@ test('a ripple pushes only decorative particles outward and expires without a re
  const field=new WindField(),stars=Object.freeze([{ra:1.2,dec:-.3}]),before=JSON.stringify(stars);field.ripple({x:.5,y:.5},0);field.prepare(600);const a=field.offset(500+600*.6*.33,300,1000,600),b=field.offset(500-600*.6*.33,300,1000,600);assert.ok(a[0]>5);assert.ok(b[0]<-5);assert.ok(Math.abs(a[1])<1e-8);field.prepare(2600);assert.deepEqual(field.offset(620,300,1000,600),[0,0]);assert.equal(JSON.stringify(stars),before);
 });
 test('particle interaction is smoothed and keeps a bounded ripple history',()=>{
- const stage=new StatueStage(),gl=new Proxy({}, {get:()=>()=>{}});stage.gl=gl;stage.program={};stage.uniforms={};stage.canvas={width:0,height:0,style:{}};stage.origin={x:500,y:300};stage.timeline.start(0);stage.lastDraw=3500;stage.animationStarted=0;
+ const stage=new StatueStage(),gl=new Proxy({}, {get:()=>()=>{}});stage.gl=gl;stage.program={};stage.uniforms={};stage.canvas={width:0,height:0,style:{}};stage.origin={x:500,y:300};stage.timeline.start(0);stage.timeline.sample(5000);stage.lastDraw=5000;stage.animationStarted=0;
  const prior=globalThis.devicePixelRatio;globalThis.devicePixelRatio=1;
- try{stage.interact(1,0,3500,1);stage.draw(null,3516,1000,600,null);assert.ok(stage.pointer.x>0&&stage.pointer.x<.3);assert.ok(stage.pointer.y<0&&stage.pointer.y>-.3);for(let i=1;i<10;i++)stage.interact(.5,.5,3500+i*300,1);assert.equal(stage.ripples.length,3);stage.draw(null,9000,1000,600,null);assert.equal(stage.ripples.length,0);}finally{if(prior===undefined)delete globalThis.devicePixelRatio;else globalThis.devicePixelRatio=prior;}
+ try{stage.interact(1,0,5000,1);stage.draw(null,5016,1000,600,null);assert.ok(stage.pointer.x>0&&stage.pointer.x<.3);assert.ok(stage.pointer.y<0&&stage.pointer.y>-.3);for(let i=1;i<10;i++)stage.interact(.5,.5,5000+i*300,1);assert.equal(stage.ripples.length,3);stage.draw(null,11000,1000,600,null);assert.equal(stage.ripples.length,0);}finally{if(prior===undefined)delete globalThis.devicePixelRatio;else globalThis.devicePixelRatio=prior;}
 });
 
 test('the cloud changes its envelope over time, including the quiet motion setting',()=>{
@@ -93,3 +93,32 @@ test('flow particles have real sampled surface destinations instead of zero-targ
  assert.equal(JSON.stringify(points),before);
 });
 
+
+test('surface ripples expand outwards, stay bounded, and leave no residual displacement',()=>{
+ const source=Object.freeze([Object.freeze({x:.5,y:.5,time:1000,strength:1.4})]),before=JSON.stringify(source);
+ const waves=prepareRippleWaves(source,1450,1000,600),radius=.45*600*.36;
+ const right=rippleDisplacement(500+radius,300,waves,42),left=rippleDisplacement(500-radius,300,waves,42);
+ assert.ok(right.x>8);assert.ok(left.x< -8);assert.ok(Math.abs(right.y)<1e-9);
+ const stacked=rippleDisplacement(500+radius,300,[...waves,...waves,...waves],42);assert.ok(Math.hypot(stacked.x,stacked.y)<=42);
+ assert.deepEqual(rippleDisplacement(600,300,prepareRippleWaves(source,1000,1000,600),42),{x:0,y:0});
+ assert.deepEqual(rippleDisplacement(600,300,prepareRippleWaves(source,3500,1000,600),42),{x:0,y:0});assert.equal(JSON.stringify(source),before);
+});
+test('surface ripple input starts only during the stable hold and cannot extend the automatic return',()=>{
+ const stage=new StatueStage();stage.timeline.start(0);stage.interact(.5,.5,1000,1);assert.equal(stage.ripples.length,0);
+ stage.timeline.sample(5000);stage.interact(.5,.5,5000,0);assert.equal(stage.ripples.length,0);
+ stage.interact(.5,.5,5000,1);stage.interact(.6,.5,5100,1);assert.equal(stage.ripples.length,1);
+ for(const t of [5300,5600,5900])stage.interact(.6,.5,t,1);assert.equal(stage.ripples.length,3);
+ stage.timeline.sample(9100);const before=JSON.stringify(stage.ripples);stage.interact(.5,.5,9200,1);assert.equal(JSON.stringify(stage.ripples),before);
+ assert.equal(stage.draw(null,12000,1000,600,null).done,true);assert.equal(stage.ripples.length,0);assert.equal(stage.busy,false);
+});
+test('Canvas held particles are displaced by a ripple and the intact body cache returns after it expires',()=>{
+ const stage=new StatueStage(),dots=[],bodies=[];stage.context={clearRect(){},fillRect(x,y){dots.push({x,y});},drawImage(){bodies.push(this.globalAlpha);}};
+ stage.animationStarted=0;stage.origin={x:500,y:300};stage.body={};stage.fallbackPose={};stage.fallbackDisplacement={};stage.fallbackPalette=Array(12).fill('#d5b784');
+ const point=Object.freeze({target:Object.freeze({x:.1,y:0,z:0}),seed:Object.freeze({x:.6,y:.5,z:.5}),loose:false});
+ stage.fallbackGroups=Array.from({length:12},(_,i)=>i===0?[point]:[]);
+ const sample={formation:1,release:0,presence:1,hold:true},layout=stage.layout(1000,600);
+ stage.drawFallback(layout,5500,sample,false);assert.equal(dots.length,0);assert.equal(bodies.at(-1),1);
+ stage.ripples=[{x:.45,y:.52,time:5000,strength:1.2}];stage.drawFallback(layout,5500,sample,false);
+ const home=layout.cx+.1*layout.size*(1+Math.sin(5.5*1.22)*.004);assert.ok(dots.at(-1).x>home+5);assert.ok(bodies.at(-1)<.6);
+ const count=dots.length;stage.drawFallback(layout,7600,sample,false);assert.equal(dots.length,count);assert.equal(bodies.at(-1),1);
+});
