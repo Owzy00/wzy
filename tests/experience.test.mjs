@@ -1,4 +1,4 @@
-import {cloudField,cloudPose,cloudPresence,prepareRippleWaves,rippleDisplacement} from '../dist/cloud-field.js';
+import {cloudField,cloudPose,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement} from '../dist/cloud-field.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -103,8 +103,8 @@ test('surface ripples expand outwards, stay bounded, and leave no residual displ
  assert.deepEqual(rippleDisplacement(600,300,prepareRippleWaves(source,1000,1000,600),42),{x:0,y:0});
  assert.deepEqual(rippleDisplacement(600,300,prepareRippleWaves(source,3500,1000,600),42),{x:0,y:0});assert.equal(JSON.stringify(source),before);
 });
-test('surface ripple input starts only during the stable hold and cannot extend the automatic return',()=>{
- const stage=new StatueStage();stage.timeline.start(0);stage.interact(.5,.5,1000,1);assert.equal(stage.ripples.length,0);
+test('surface ripple input works throughout generation and hold without extending the automatic return',()=>{
+ const stage=new StatueStage();stage.interact(.5,.5,0,1);assert.equal(stage.ripples.length,0);stage.timeline.start(0);stage.interact(.5,.5,1000,1);assert.equal(stage.ripples.length,1);stage.ripples=[];
  stage.timeline.sample(5000);stage.interact(.5,.5,5000,0);assert.equal(stage.ripples.length,0);
  stage.interact(.5,.5,5000,1);stage.interact(.6,.5,5100,1);assert.equal(stage.ripples.length,1);
  for(const t of [5300,5600,5900])stage.interact(.6,.5,t,1);assert.equal(stage.ripples.length,3);
@@ -119,6 +119,6 @@ test('Canvas held particles are displaced by a ripple and the intact body cache 
  const sample={formation:1,release:0,presence:1,hold:true},layout=stage.layout(1000,600);
  stage.drawFallback(layout,5500,sample,false);assert.equal(dots.length,0);assert.equal(bodies.at(-1),1);
  stage.ripples=[{x:.45,y:.52,time:5000,strength:1.2}];stage.drawFallback(layout,5500,sample,false);
- const home=layout.cx+.1*layout.size*(1+Math.sin(5.5*1.22)*.004);assert.ok(dots.at(-1).x>home+5);assert.ok(bodies.at(-1)<.6);
+ const home=layout.cx+.1*layout.size*(1+Math.sin(5.5*1.22)*.007);assert.ok(dots.at(-1).x>home+5);assert.ok(bodies.at(-1)<.6);
  const count=dots.length;stage.drawFallback(layout,7600,sample,false);assert.equal(dots.length,count);assert.equal(bodies.at(-1),1);
 });

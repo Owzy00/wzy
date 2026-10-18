@@ -22,6 +22,15 @@ export function nearestMansion(mansions,project,viewport){
  }
  return nearest;
 }
+// Snapshot projected light sources; never change or sort the catalogue itself.
+export function brightStarOrigins(members,project,width,height,fallback){
+ const points=members.map(star=>({star,point:project(star.ra,star.dec)}))
+  .filter(({point:p})=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=0&&p.x<=width&&p.y>=0&&p.y<=height)
+  .sort((a,b)=>a.star.mag-b.star.mag).slice(0,5)
+  .map(({star,point:p})=>({x:p.x/width,y:p.y/height,id:star.id,mag:star.mag}));
+ if(!points.length&&fallback&&Number.isFinite(fallback.x)&&Number.isFinite(fallback.y))points.push({x:clamp(fallback.x/width,0,1),y:clamp(fallback.y/height,0,1)});
+ return points;
+}
 export function formatRA(ra){const hours=wrap(ra)/TAU*24;return `${String(Math.floor(hours)).padStart(2,'0')}h ${String(Math.floor(hours%1*60)).padStart(2,'0')}m`;}
 export function formatDec(dec){return `${dec>=0?'+':'−'}${Math.abs(dec/RAD).toFixed(1)}°`;}
 export function segmentSamples(a,b,steps=12){const va=vector(a.ra,a.dec),vb=vector(b.ra,b.dec),dot=clamp(va.reduce((s,x,i)=>s+x*vb[i],0),-1,1),angle=Math.acos(dot);return Array.from({length:steps+1},(_,i)=>{const t=i/steps,s=Math.sin(angle),u=s<1e-9?1-t:Math.sin((1-t)*angle)/s,v=s<1e-9?t:Math.sin(t*angle)/s,p=va.map((x,k)=>u*x+v*vb[k]);return {ra:wrap(Math.atan2(p[2],p[0])),dec:Math.atan2(p[1],Math.hypot(p[0],p[2]))};});}

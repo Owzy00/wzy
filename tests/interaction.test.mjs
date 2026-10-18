@@ -8,21 +8,21 @@ import {MorphTimeline,StatueStage} from '../dist/particle-effects.js';
 async function scene(run){
  const names=['document','window','fetch','requestIdleCallback','cancelIdleCallback','innerWidth','innerHeight'],saved=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
  globalThis.innerWidth=1000;globalThis.innerHeight=800;
- const elements=new Map(),listeners={},classes=new Set(),idle=[];
+ const styles={},elements=new Map(),listeners={},classes=new Set(),idle=[];
  const element=id=>{if(!elements.has(id))elements.set(id,{id,hidden:['gesture-panel','statue-stage-ui','gesture-hud'].includes(id),style:{},value:0,textContent:'',setAttribute(name,value){this[name]=value;},focus(){},getContext(){return {};}});return elements.get(id);};
  const main={inert:false},bottom={inert:false};
- globalThis.document={hidden:false,body:{style:{setProperty(){}},insertAdjacentHTML(){},classList:{toggle(name,value){if(value)classes.add(name);else classes.delete(name);},add(name){classes.add(name);},remove(name){classes.delete(name);}}},getElementById:element,querySelector:selector=>selector==='main'?main:bottom,addEventListener:(name,callback)=>listeners[name]=callback};
+ globalThis.document={hidden:false,body:{style:{setProperty(key,value){styles[key]=value;}},insertAdjacentHTML(){},classList:{toggle(name,value){if(value)classes.add(name);else classes.delete(name);},add(name){classes.add(name);},remove(name){classes.delete(name);}}},getElementById:element,querySelector:selector=>selector==='main'?main:bottom,addEventListener:(name,callback)=>listeners[name]=callback};
  globalThis.window={addEventListener:(name,callback)=>listeners[name]=callback};
  globalThis.fetch=async()=>({ok:true,json:async()=>({items:Array.from({length:28},(_,id)=>({id,name:'宿'+id,title:'彩塑'+id,pinyin:'test'}))})});
  globalThis.requestIdleCallback=callback=>idle.push(callback);globalThis.cancelIdleCallback=()=>{};
  let callbacks,selected=3,selectedCount=0,panDistance=0,morphs=0,starts=0,stops=0,restores=0,touches=0;
- const stage={timeline:new MorphTimeline(),get busy(){return this.timeline.busy;},get occludesSky(){return this.busy;},prepare(){},interact(...args){this.lastInteraction=args;touches++;},start(item,now){if(!this.timeline.start(now))return false;this.item=item;morphs++;return true;},draw(ctx,now){return this.timeline.sample(now);},finish(now){this.timeline.finish(now);},pointer:{}};
+ const stage={timeline:new MorphTimeline(),get busy(){return this.timeline.busy;},get occludesSky(){return this.busy;},prepare(){},interact(...args){this.lastInteraction=args;touches++;},start(item,now,sources){this.sources=sources;if(!this.timeline.start(now))return false;this.item=item;morphs++;return true;},draw(ctx,now){return this.timeline.sample(now);},finish(now){this.timeline.finish(now);},pointer:{}};
  const camera={running:false,inferenceMs:30,async start(){starts++;this.running=true;callbacks.onStatus('running','已接入');},stop(){stops++;this.running=false;callbacks.onStatus('off','已关闭');}};
- const adapter={selected:()=>({id:selected,name:'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
+ const adapter={emissionSources:()=>[{x:.3,y:.4},{x:.5,y:.6}],selected:()=>({id:selected,name:'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
  try{
   const experience=initExperience(adapter,{cameraFactory:(video,c)=>{callbacks=c;return camera;},stageFactory:()=>stage});
   await new Promise(resolve=>setImmediate(resolve));
-  await run({experience,stage,camera,element,listeners,classes,callbacks,counts:()=>({starts,stops,morphs,selectedCount,panDistance,restores,touches}),emit:(pose,time,x=.5)=>callbacks.onSample(pose?{pose,palm:{x,y:.5},span:.15}:null,time,null,pose?1:0)});
+  await run({styles,experience,stage,camera,element,listeners,classes,callbacks,counts:()=>({starts,stops,morphs,selectedCount,panDistance,restores,touches}),emit:(pose,time,x=.5)=>callbacks.onSample(pose?{pose,palm:{x,y:.5},span:.15}:null,time,null,pose?1:0)});
  }finally{for(const [name,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 }
 
@@ -34,8 +34,9 @@ test('one camera session supports navigation, fist selection, palm morph and aut
  for(let t=550;t<=1100;t+=50){s.emit('fist',base+t);s.experience.beforeFrame(base+t);}
  assert.equal(s.counts().selectedCount,1);assert.equal(s.counts().morphs,0);assert.equal(s.counts().panDistance,moved);
  for(let t=1150;t<=1400;t+=50)s.emit('open',base+t);
- assert.equal(s.counts().morphs,1);assert.equal(s.experience.busy,true);s.experience.beforeFrame(base+1500);assert.equal(s.camera.suspended,true);assert.equal(s.counts().stops,0);
- const hold=s.stage.timeline.started+s.stage.timeline.duration.gather+700;s.experience.draw(null,hold,1000,800,null,false);s.experience.beforeFrame(hold+16);assert.equal(s.camera.suspended,false);const touches=s.counts().touches;s.emit('open',hold+50);assert.equal(s.counts().touches,touches+1);assert.equal(s.counts().morphs,1);s.emit('open',hold+100,.55);s.emit('open',hold+150,.61);assert.ok(s.stage.lastInteraction[3]>.18);s.listeners.pointermove({clientX:400,clientY:400,target:{id:'sky'}});s.listeners.pointermove({clientX:500,clientY:400,target:{id:'sky'}});assert.ok(s.stage.lastInteraction[3]>.18);assert.equal(s.counts().selectedCount,1);assert.equal(s.counts().morphs,1);
+ assert.equal(s.counts().morphs,1);assert.equal(s.experience.busy,true);s.experience.beforeFrame(base+1500);assert.equal(s.camera.suspended,false);assert.equal(s.counts().stops,0);
+ assert.deepEqual(s.stage.sources,[{x:.3,y:.4},{x:.5,y:.6}]);const gatheringTouches=s.counts().touches;s.emit('open',base+1550,.53);s.emit('open',base+1600,.59);assert.ok(s.stage.lastInteraction[3]>.18);assert.equal(s.counts().touches,gatheringTouches+2);assert.equal(s.counts().panDistance,moved);assert.equal(s.counts().selectedCount,1);
+ const hold=s.stage.timeline.started+s.stage.timeline.duration.gather+700;s.experience.draw(null,hold,1000,800,null,false);s.experience.beforeFrame(hold+16);assert.equal(s.camera.suspended,false);assert.ok(Number(s.styles['--stage-sky-opacity'])>=.5);assert.equal(s.styles['--stage-scale'],'1');const touches=s.counts().touches;s.emit('open',hold+50);assert.equal(s.counts().touches,touches+1);assert.equal(s.counts().morphs,1);s.emit('open',hold+100,.55);s.emit('open',hold+150,.61);assert.ok(s.stage.lastInteraction[3]>.18);s.listeners.pointermove({clientX:400,clientY:400,target:{id:'sky'}});s.listeners.pointermove({clientX:500,clientY:400,target:{id:'sky'}});assert.ok(s.stage.lastInteraction[3]>.18);assert.equal(s.counts().selectedCount,1);assert.equal(s.counts().morphs,1);
  const end=s.stage.timeline.started+s.stage.timeline.duration.gather+s.stage.timeline.duration.hold+s.stage.timeline.duration.return+100;s.experience.draw(null,end,1000,800,null,false);s.experience.beforeFrame(end+16);
  assert.equal(s.experience.busy,false);assert.equal(s.camera.suspended,false);assert.equal(s.camera.running,true);assert.equal(s.counts().restores,1);assert.equal(s.counts().starts,1);
  for(let t=0;t<=1000;t+=100){s.emit('open',end+100+t);s.experience.beforeFrame(end+100+t);}assert.equal(s.counts().morphs,1);

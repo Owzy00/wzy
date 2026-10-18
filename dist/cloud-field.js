@@ -4,6 +4,23 @@ const cloudClamp=x=>Math.max(0,Math.min(1,x));
 const cloudSmooth=x=>{x=cloudClamp(x);return x*x*(3-2*x);};
 export function cloudSettle(seed,formation){const start=.08+seed.y*.18+seed.z*.08,end=.66+seed.y*.30;return cloudSmooth((formation-start)/(end-start));}
 export function cloudPresence(amount){return cloudSmooth(amount/.10);}
+// Staggered star flights join the existing cloud with zero endpoint velocity.
+// Coordinates here are screen pixels, independent of celestial coordinates.
+export function starFlight(seed,time,source,destination,dim,motion=1,out={}){
+ if(time>=2.5){out.x=destination.x;out.y=destination.y;out.visibility=1;return out;}
+ const hash=Math.sin(seed.x*127.1+seed.y*311.7+seed.z*74.7)*43758.5453,r=hash-Math.floor(hash);
+ const age=cloudClamp((time-r*.8)/(1.25+seed.z*.45)),f=cloudSmooth(age),arc=Math.sin(f*Math.PI);
+ const angle=r*6.2831853+f*4.5;
+ out.x=source.x*(1-f)+destination.x*f+Math.cos(angle)*arc*dim*(.055+seed.z*.055)*motion;
+ out.y=source.y*(1-f)+destination.y*f+Math.sin(angle)*arc*dim*(.06+seed.z*.07)*motion;
+ out.visibility=cloudSmooth((age-.035)/.22)*(.28+.72*f);
+ return out;
+}
+export function statueSurface(target,time,pointer,motion=1,out={}){
+ const breath=1+Math.sin(time*1.22)*.007*motion;
+ out.x=target.x*breath+target.z*pointer.x*.055*motion;
+ out.y=target.y*breath+target.z*pointer.y*.025*motion;out.z=target.z;return out;
+}
 // Analytic waves displace visual particles from their immutable targets, then vanish.
 export function prepareRippleWaves(ripples,now,width,height){
  const dim=Math.min(width,height),waves=[];
@@ -36,6 +53,7 @@ export function cloudPose(target,seed,time,formation,release,loose=false,motion=
  out.x=out.x*(1-f)+target.x*f+Math.sin(seed.y*6.28+time*.43)*arc*.12;
  out.y=out.y*(1-f)+target.y*f-Math.cos(seed.x*6.28-time*.38)*arc*.09;
  out.z=out.z*(1-f)+target.z*f;
+ if(release<=0)return out;
  const u=(seed.x-.5)*2.6,v=(seed.y-.5)*1.7,t=(time+4)*.75*motion;
  const a=u*2.8+v*1.9-t*.94,b=v*5.1-u*1.65+t*.71;
  const ex=u*.83+Math.sin(a)*.27+Math.sin(b)*.16,ey=v*.63+Math.sin(u*3.7+v*.8-t*.82)*.29;
@@ -44,6 +62,13 @@ export function cloudPose(target,seed,time,formation,release,loose=false,motion=
  return out;
 }
 export const CLOUD_GLSL=`
+vec3 starFlight(vec3 seed,float time,vec2 source,vec2 destination,float dim,float motion){
+ if(time>=2.5)return vec3(destination,1.);
+ float r=fract(sin(dot(seed,vec3(127.1,311.7,74.7)))*43758.5453);
+ float age=clamp((time-r*.8)/(1.25+seed.z*.45),0.,1.),f=smoothstep(0.,1.,age),arc=sin(f*3.14159265),angle=r*6.2831853+f*4.5;
+ vec2 p=mix(source,destination,f)+vec2(cos(angle)*(.055+seed.z*.055),sin(angle)*(.06+seed.z*.07))*arc*dim*motion;
+ return vec3(p,smoothstep(.035,.255,age)*(.28+.72*f));
+}
 float cloudSettle(vec3 seed,float formation){return smoothstep(.08+seed.y*.18+seed.z*.08,.66+seed.y*.30,formation);}
 vec3 cloudField(vec3 seed,float time,float motion){
  float t=time*.75*motion,u=(seed.x-.5)*2.6,v=(seed.y-.5)*1.7;
@@ -57,6 +82,7 @@ vec3 cloudPose(vec3 target,vec3 seed,float time,float formation,float release,fl
  vec3 p=mix(cloudField(seed,time,motion),target,f);
  float arc=sin(f*3.14159265)*(1.-release)*motion;
  p.xy+=vec2(sin(seed.y*6.28+time*.43)*.12,-cos(seed.x*6.28-time*.38)*.09)*arc;
+ if(release<=0.)return p;
  float u=(seed.x-.5)*2.6,v=(seed.y-.5)*1.7,t=(time+4.)*.75*motion;
  float a=u*2.8+v*1.9-t*.94,b=v*5.1-u*1.65+t*.71;
  vec2 escape=vec2(u*.83+sin(a)*.27+sin(b)*.16,v*.63+sin(u*3.7+v*.8-t*.82)*.29);
