@@ -1,16 +1,6 @@
-import {projectSphere} from './astronomy.js?v=11';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
-// The decorative band uses its own frozen camera, independent of sky navigation and wind.
-export class FixedStarBand{
- constructor(referenceCamera){this.reference=Object.freeze({...referenceCamera});}
- project(particle,viewport){const ra=particle.t,dec=Math.sin(particle.t-2.6)*.67+particle.width*.23+Math.sin(particle.t*5+particle.phase)*.018;return projectSphere(ra,dec,this.reference,viewport);}
-}
-export function statueTransform(pointer,width,height){
- const x=Math.max(-1,Math.min(1,pointer.x)),y=Math.max(-1,Math.min(1,pointer.y));
- return {x:x*Math.min(width*.065,105),y:y*Math.min(height*.02,18),yaw:x*.018};
-}
 export function decodeCloud(item){
  const binary=atob(item.data),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);if(bytes.length!==item.count*9)throw new Error('点云字节数不匹配');
  const v=new DataView(bytes.buffer),points=[];for(let i=0;i<item.count;i++){const o=i*9;points.push({x:v.getInt16(o,true)/1000,y:v.getInt16(o+2,true)/1000,z:v.getInt16(o+4,true)/1000,r:v.getUint8(o+6),g:v.getUint8(o+7),b:v.getUint8(o+8)});}return points;
@@ -24,9 +14,6 @@ export class WindField{
  offset(x,y,width,height){let dx=0,dy=0;const dim=Math.min(width,height),radius=dim*.38;for(const g of this.active){const d2=(x-g.x*width)**2+(y-g.y*height)**2;const a=Math.exp(-d2/(radius*radius))*g.strength;dx+=g.dx*a;dy+=g.dy*a;}for(const r of this.waves){const x0=x-r.x*width,y0=y-r.y*height,d=Math.hypot(x0,y0),delta=d-r.age*dim*.33,force=Math.exp(-delta*delta/(dim*.035)**2)*Math.exp(-r.age*1.7)*r.strength*23;dx+=x0/Math.max(1,d)*force;dy+=y0/Math.max(1,d)*force;}return [dx,dy];}
  draw(context,width,height){
   const dim=Math.min(width,height);context.save();context.globalCompositeOperation='lighter';
-  // Free motes carry input feedback; the fixed star band is never displaced.
-  for(const g of this.active){const x=g.x*width,y=g.y*height,reach=g.strength*.22;context.fillStyle='#e8ce8e';context.globalAlpha=Math.min(.35,g.strength/700);for(let i=0;i<20;i++){const seed=i*.61803398875%1,angle=i*2.39996;context.fillRect(x+g.dx*reach*seed+Math.cos(angle)*reach*.25,y+g.dy*reach*seed+Math.sin(angle)*reach*.25,.8+seed,.8+seed);}}
-  context.globalAlpha=1;
   for(const r of this.waves){const radius=r.age*dim*.33,alpha=Math.sin(Math.min(1,r.age/.25)*Math.PI/2)*Math.exp(-r.age*1.9)*.24*r.strength;if(radius<1)continue;context.strokeStyle=`rgba(236,207,134,${alpha})`;context.lineWidth=.55;context.beginPath();context.arc(r.x*width,r.y*height,radius,0,Math.PI*2);context.stroke();for(let i=0;i<12;i++){const angle=i*2.39996+r.time*.001,x=r.x*width+Math.cos(angle)*radius,y=r.y*height+Math.sin(angle)*radius;context.fillStyle=`rgba(255,231,166,${alpha*.8})`;context.fillRect(x,y,1.2,1.2);}}
   context.restore();
  }
@@ -66,7 +53,7 @@ export function createParticleBuffer(points,flowCount=96000){
 const FLOW_VERTEX=`
 precision highp float;
 attribute vec3 aTarget;attribute vec3 aColor;attribute vec3 aSeed;attribute float aFlow;
-uniform vec2 uViewport,uOrigin;uniform vec3 uLayout,uModel;uniform float uTime,uAmount,uFormation,uRelease,uDpr,uReduced;
+uniform vec2 uViewport,uPointer,uOrigin;uniform vec3 uLayout;uniform float uTime,uAmount,uFormation,uRelease,uDpr,uReduced;
 uniform vec4 uRipple0,uRipple1,uRipple2;
 varying vec3 vColor;varying float vAlpha;
 vec2 wake(vec2 p,vec4 ripple){
@@ -86,19 +73,20 @@ void main(){
    y=.04+band*.088+sin(x*5.8+band*1.37-t*.28)*.07+sin(x*10.9-band+t*.19)*.025;
    y+=thread*(.009+.027*pow(.5+.5*sin(x*5.+band-t*.2),2.));
   }else{y+=sin(x*6.3+aSeed.z*8.+t*.18)*.035;}
-  pos=vec2(x*uViewport.x,y*uViewport.y);
+  pos=vec2(x*uViewport.x,y*uViewport.y)+uPointer*vec2(13.,9.)*depth;
   float centerFade=smoothstep(.28,.46,x)*(1.-smoothstep(.63,.82,x));
   float flowLight=aSeed.z<.64?.58:.22;
   vAlpha=flowLight*(1.-centerFade*.88)*(.7+aSeed.z*.35)*smoothstep(0.,.28,uAmount);
   size=(aSeed.z>.993?6.2:1.9+aSeed.z*.9)*uDpr*depth;
  }else{
   float settle=smoothstep(aSeed.z*.22,.76+aSeed.z*.22,uFormation);
-  vec3 body=aTarget;float yaw=uModel.z*motion;
+  vec3 body=aTarget;float yaw=(sin(t*.31)*.045+uPointer.x*.14)*motion;
   float bodyX=body.x*cos(yaw)+body.z*sin(yaw),bodyZ=body.z*cos(yaw)-body.x*sin(yaw);
-  float breath=sin(t*1.42)*.006*motion;
+  float breath=sin(t*1.42)*.009*motion,cloth=.3+smoothstep(-.3,.18,body.y)*.7;
   vec2 shape=vec2(bodyX,body.y)*(1.+breath);
-  // A single bounded transform moves the entire statue; no per-point input distortion.
-  vec2 target=uLayout.xy+uModel.xy+shape*uLayout.z;
+  shape+=vec2(sin(body.y*18.+t*.55),cos(body.x*17.-t*.48))*.0022*cloth*motion;
+  shape+=vec2(bodyZ*uPointer.x*.12,bodyZ*uPointer.y*.07);
+  vec2 target=uLayout.xy+shape*uLayout.z*(1.+bodyZ*.10);
   // Broad independent source positions prevent rings or dense starting clumps.
   vec2 source=vec2(aSeed.x*uViewport.x,aSeed.y*uViewport.y);
   vec2 bend=mix(source,uOrigin,.19);bend+=vec2((aSeed.y-.5)*uViewport.x*.18,-uViewport.y*(.10+aSeed.z*.18));
@@ -113,8 +101,7 @@ void main(){
   size=mix(.95,2.6+aSeed.z*.65,settle)*uDpr;
   if(aSeed.x>.991){size*=1.9;vAlpha*=.78+.22*sin(t*2.+aSeed.y*30.);}
  }
- // Ripples affect free motes only, never the statue or the background ribbons.
- if(aFlow>.5&&aSeed.z>=.64)pos+=(wake(pos,uRipple0)+wake(pos,uRipple1)+wake(pos,uRipple2))*motion;
+ pos+=(wake(pos,uRipple0)+wake(pos,uRipple1)+wake(pos,uRipple2))*motion;
  vColor=mix(vec3(.94,.77,.46),aColor,aFlow>.5?1.:smoothstep(.18,.9,uFormation))*glint;
  gl_Position=vec4(pos.x/uViewport.x*2.-1.,1.-pos.y/uViewport.y*2.,0.,1.);
  gl_PointSize=max(1.,size);
@@ -138,7 +125,7 @@ export class StatueStage{
    this.gl=gl;
    const shader=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;};
    const vs=shader(gl.VERTEX_SHADER,FLOW_VERTEX),fs=shader(gl.FRAGMENT_SHADER,FLOW_FRAGMENT),program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));gl.deleteShader(vs);gl.deleteShader(fs);
-   this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uViewport','uModel','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2'])this.uniforms[n]=gl.getUniformLocation(program,n);
+   this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2'])this.uniforms[n]=gl.getUniformLocation(program,n);
    gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
    for(const [name,size,offset]of [['aTarget',3,0],['aColor',3,12],['aSeed',3,24],['aFlow',1,36]]){const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,40,offset);}
    gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.clearColor(0,0,0,0);this.renderer='webgl';
@@ -165,10 +152,8 @@ export class StatueStage{
   this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);return true;
  }
  finish(now){this.timeline.finish(now);}
- interact(x,y,now){
+ interact(x,y,now,strength=0){
   this.pointerTarget={x:(clamp01(x)-.5)*2,y:(clamp01(y)-.5)*2};
- }
- ripple(x,y,now,strength=1){
   if(strength>.18&&now-this.lastRipple>260){this.lastRipple=now;this.ripples.push({x:clamp01(x),y:clamp01(y),time:now,strength:Math.min(1.4,strength)});this.ripples=this.ripples.slice(-3);}
  }
  prepareFallback(){
@@ -181,19 +166,19 @@ export class StatueStage{
  drawFallback(l,now,sample,reduced){
   const c=this.context;c.clearRect(0,0,l.width,l.height);const t=reduced?0:(now-this.animationStarted)*.0003;
   c.globalAlpha=smooth(sample.amount/.4)*.24;c.drawImage(this.flow,-l.width*.05+Math.sin(t*.5)*l.width*.025,Math.sin(t*.7)*l.height*.01,l.width*1.1,l.height);
-  const settle=smooth(sample.formation),scale=1+(reduced?0:Math.sin(t*4.73)*.006)+(1-settle)*.12+sample.release*.12,size=l.size*scale,left=l.cx-size/2,top=l.cy-size/2-sample.release*l.height*.08,model=statueTransform(this.pointer,l.width,l.height);
-  c.save();c.globalAlpha=settle*(1-sample.release);c.drawImage(this.body,left+model.x,top+model.y,size,size);c.restore();
+  const settle=smooth(sample.formation),scale=1+(reduced?0:Math.sin(t*4.73)*.009)+(1-settle)*.12+sample.release*.12,size=l.size*scale,left=l.cx-size/2,top=l.cy-size/2-sample.release*l.height*.08;
+  c.save();c.globalAlpha=settle*(1-sample.release);c.drawImage(this.body,left+this.pointer.x*4,top+this.pointer.y*2,size,size);c.restore();
   c.globalAlpha=1;
  }
  draw(ctx,now,width,height,anchor,reduced=false){
   const started=performance.now(),frameDelta=Math.max(0,Math.min(60,now-this.lastDraw));if(this.busy&&this.lastDraw){const dt=now-this.lastDraw;if(dt>0){this.intervals.push(dt);if(this.intervals.length>180)this.intervals.shift();}}this.lastDraw=now;
   const sample=this.timeline.sample(now);
-  if(sample.done){this.ripples=[];if(this.canvas){this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
+  if(sample.done){if(this.canvas){this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
   const l=this.layout(width,height);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
   const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
   this.opacity=sample.amount;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
   this.ripples=this.ripples.filter(r=>now-r.time<2500);
-  if(this.gl){const gl=this.gl,u=this.uniforms,model=statueTransform(this.pointer,width,height);gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform3f(u.uModel,model.x,model.y,model.yaw);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.amount);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
+  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.amount);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
   else{this.context.setTransform(dpr,0,0,dpr,0,0);this.drawFallback(l,now,sample,reduced);}
   this.frameMs=performance.now()-started;
   if(this.intervals.length){const sorted=[...this.intervals].sort((a,b)=>a-b),mean=this.intervals.reduce((a,b)=>a+b)/this.intervals.length;this.cadence={fps:Math.round(1000/mean),p95Ms:Math.round(sorted[Math.floor(sorted.length*.95)]*10)/10,samples:sorted.length};}

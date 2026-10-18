@@ -1,4 +1,4 @@
-import {describeHand} from './gesture-core.js?v=11';
+import {describeHand} from './gesture-core.js?v=12';
 export function createHandWorker(){
  if(globalThis.XINGYE_WORKER_SOURCE){const url=URL.createObjectURL(new Blob([globalThis.XINGYE_WORKER_SOURCE],{type:'text/javascript'}));const worker=new Worker(url,{type:'module'});URL.revokeObjectURL(url);return worker;}
  return new Worker(new URL('./hand-worker.js',import.meta.url),{type:'module'});

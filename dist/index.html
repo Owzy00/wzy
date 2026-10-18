@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080b0f"><meta name="description" content="循四象，访二十八宿。在深墨夜空、微蓝星尘与明黄星光中探索中国传统星空。"><title>星野 · 手势与彩塑 v11</title><link rel="stylesheet" href="./style.css"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080b0f"><meta name="description" content="循四象，访二十八宿。在深墨夜空与明黄星光中探索中国传统星空。"><title>星野 · 手势与彩塑 v12</title><link rel="stylesheet" href="./style.css"></head>
 <body>
 <canvas id="sky" tabindex="0" aria-label="交互星图。方向键环顾，加减号缩放，Tab 切换至星宿按钮，Enter 选择。"></canvas>
 <div class="vignette"></div>
 <header class="topbar">
  <a class="brand" href="./" aria-label="星野首页"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="18"/><ellipse cx="24" cy="24" rx="9" ry="22" transform="rotate(38 24 24)"/><path d="M2 24h44M24 2v44"/><circle cx="24" cy="24" r="3" class="filled"/></svg><span class="brand-name">星 野<small>CELESTIAL ATLAS</small></span></a>
- <div class="project-title"><span class="tiny-rule"></span>四象 · 二十八宿<span class="tag">交互篇 · v11</span></div>
+ <div class="project-title"><span class="tiny-rule"></span>四象 · 二十八宿</div>
  <nav class="top-actions" aria-label="辅助功能"><button id="sources" class="text-button"><span>◎</span> 数据来源</button><button id="help" class="text-button"><span>?</span> 操作指南</button><button id="fullscreen" class="icon-button" title="全屏" aria-label="进入全屏">⛶</button></nav>
 </header>
 <main>
@@ -28,10 +28,10 @@
   <div class="facts"><div><span>主体成员</span><strong id="member-count"></strong></div><div><span>最亮成员星等</span><strong id="magnitude"></strong></div><div><span>赤经 / 赤纬</span><strong id="mansion-coord"></strong></div></div>
   <button class="focus-button" id="focus-selected">定位此宿 <span>⌖</span></button>
   <details class="members"><summary>恒星目录 <span>HIPPARCOS ↗</span></summary><div id="member-list"></div></details>
-  <p class="info-note">星官连线依据 Stellarium 中国星空图式<br>装饰星尘独立于真实天球坐标</p>
+  <p class="info-note">星官连线依据 Stellarium 中国星空图式<br>天球主星坐标保持固定</p>
  </aside>
  <div class="view-toolbar" aria-label="星图视角与图层">
-  <div class="segmented" role="group" aria-label="投影视角"><button id="sphere-view" aria-pressed="true">◉ <span>天球环顾</span></button><button id="atlas-view" aria-pressed="false">⊕ <span>全天投影</span></button></div><span class="toolbar-separator"></span><button id="toggle-lines" class="tool-button" aria-pressed="true" title="显示或隐藏连线">⌁ <span>连线</span></button><button id="toggle-grid" class="tool-button" aria-pressed="true" title="显示或隐藏坐标网">▦ <span>网格</span></button><button id="toggle-dust" class="tool-button" aria-pressed="true" title="暂停或开启星尘">✧ <span>星尘</span></button>
+  <div class="segmented" role="group" aria-label="投影视角"><button id="sphere-view" aria-pressed="true">◉ <span>天球环顾</span></button><button id="atlas-view" aria-pressed="false">⊕ <span>全天投影</span></button></div><span class="toolbar-separator"></span><button id="toggle-lines" class="tool-button" aria-pressed="true" title="显示或隐藏连线">⌁ <span>连线</span></button><button id="toggle-grid" class="tool-button" aria-pressed="true" title="显示或隐藏坐标网">▦ <span>网格</span></button>
  </div>
  <div class="zoom-controls" aria-label="缩放与重置"><button id="zoom-in" aria-label="放大" title="放大 (+)">+</button><span id="zoom-value">1.0×</span><button id="zoom-out" aria-label="缩小" title="缩小 (-)">−</button><span class="zoom-divider"></span><button id="reset" aria-label="重置视角" title="重置 (R)">↺</button></div>
  <div class="explore-hint" id="explore-hint"><span>⌘</span> 拖动环顾 <i>·</i> 滚轮缩放 <i>·</i> 点选星宿</div>
@@ -40,6 +40,6 @@
 <div id="toast" role="status" aria-live="polite"></div>
 <dialog id="modal"><button class="modal-close icon-button" aria-label="关闭">×</button><div id="modal-content"></div></dialog>
 <div id="loading" class="loading"><div class="loader-orbit">✦</div><p>正在展开星图</p><small>CONNECTING THE ANCIENT SKY</small></div>
-<link rel="stylesheet" href="./experience.css?v=11">
-<script type="module" src="./app.js?v=11"></script>
+<link rel="stylesheet" href="./experience.css?v=12">
+<script type="module" src="./app.js?v=12"></script>
 </body></html>

@@ -1,12 +1,12 @@
-import {GestureMachine,HandNavigator} from './gesture-core.js?v=11';
-import {GestureCamera} from './gesture-camera.js?v=11';
-import {WindField,StatueStage} from './particle-effects.js?v=11';
+import {GestureMachine,HandNavigator} from './gesture-core.js?v=12';
+import {GestureCamera} from './gesture-camera.js?v=12';
+import {WindField,StatueStage} from './particle-effects.js?v=12';
 export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new GestureCamera(video,callbacks),stageFactory=()=>new StatueStage()}={}){
  const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator();
  let pack=null,packError=null,restoring=null,lastPhase='',windDrag=null,lastManualWind=-9999,lastSample=0,modelState='off',sampleCount=0,preparing=false,warmTask=null,lastCandidate=null,lastHud='',lastCountdown=-1,lastHandCount=0,resumeAfterPageShow=false,lastHand=null,lastPointer=null;
  const states={IDLE:'伸出单手，移手环顾',NAVIGATING:'移手环顾 · 握拳点亮',FIST_ARMING:'握拳锁定…',FIST_READY:'已点亮 · 张掌化形',OPENING:'张掌化形…',COOLDOWN:'移手继续探索',LOST:'请将一只手放入画面',BLOCKED:'彩塑展示中 · 即将自动返回'};
  document.body.insertAdjacentHTML('beforeend',`<div class="experience-actions"><button id="gesture-toggle" aria-expanded="false">◌ 手势交互</button><button id="morph-trigger">✧ 粒子化形</button></div>
- <section class="gesture-panel" id="gesture-panel" hidden aria-label="手势控制"><div class="gesture-panel-head"><strong>以手，环顾星空</strong><button id="gesture-close" aria-label="收起手势面板">×</button></div><p>移手带动星空，将星宿移近中央准星。握拳点亮，再张掌化形；成形约 4 秒后自动返回。成形时移手可平滑移动彩塑，点击仅扰动周围光粒。</p><video id="hand-video" autoplay muted playsinline aria-label="本机镜像摄像头预览"></video><canvas id="hand-overlay" aria-hidden="true"></canvas><div class="gesture-meter"><span id="gesture-pose">正在接入摄像头</span><progress id="gesture-progress" max="1" value="0" aria-label="握拳张掌进度"></progress></div><p id="camera-status" role="status" aria-live="polite">首次进入时请允许摄像头。视频仅在本机处理，不上传、不录制。</p><div class="gesture-buttons"><button id="camera-start">开启摄像头</button><button id="camera-stop" disabled>关闭摄像头</button></div><button id="manual-wind">↝ 推动星尘 <kbd>W</kbd></button><p class="camera-note">收起面板仍可交互。双手入镜或丢手会重置手势。备选：鼠标拖动环顾，M 化形，Esc 返回。</p></section>
+ <section class="gesture-panel" id="gesture-panel" hidden aria-label="手势控制"><div class="gesture-panel-head"><strong>以手，环顾星空</strong><button id="gesture-close" aria-label="收起手势面板">×</button></div><p>移手带动星空，将星宿移近中央准星。握拳点亮，再张掌化形；成形约 4 秒后自动返回。成形时移手或鼠标轻触，光粒会回应。</p><video id="hand-video" autoplay muted playsinline aria-label="本机镜像摄像头预览"></video><canvas id="hand-overlay" aria-hidden="true"></canvas><div class="gesture-meter"><span id="gesture-pose">正在接入摄像头</span><progress id="gesture-progress" max="1" value="0" aria-label="握拳张掌进度"></progress></div><p id="camera-status" role="status" aria-live="polite">首次进入时请允许摄像头。视频仅在本机处理，不上传、不录制。</p><div class="gesture-buttons"><button id="camera-start">开启摄像头</button><button id="camera-stop" disabled>关闭摄像头</button></div><button id="manual-wind">↝ 推动星尘 <kbd>W</kbd></button><p class="camera-note">收起面板仍可交互。双手入镜或丢手会重置手势。备选：鼠标拖动环顾，M 化形，Esc 返回。</p></section>
  <div id="gesture-hud" class="gesture-hud" hidden><span class="live-dot"></span><span id="gesture-hint" role="status" aria-live="polite">正在接入摄像头…</span><progress id="gesture-hud-progress" max="1" value="0" aria-label="手势操作进度"></progress></div>
  <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><div class="stage-title"><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture</span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
  function warmSelected(){
@@ -28,7 +28,7 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
   lastSample=timestamp;sampleCount++;lastHandCount=handCount;if(handCount>1)sample=null;
   let handSpeed=0;if(sample&&lastHand){const dt=(timestamp-lastHand.t)/1000,travel=Math.hypot(sample.palm.x-lastHand.x,sample.palm.y-lastHand.y);if(dt>0&&dt<.4&&travel<.18)handSpeed=travel/dt;}
   lastHand=sample?{...sample.palm,t:timestamp}:null;
-  if(stage.busy&&sample)stage.interact?.(sample.palm.x,sample.palm.y,timestamp);
+  if(stage.busy&&sample)stage.interact?.(sample.palm.x,sample.palm.y,timestamp,handSpeed*1.7);
   const previous=machine.state,event=machine.update(sample,timestamp,{selected:adapter.selected().id,busy:stage.busy||preparing||adapter.blocked()||document.hidden,enabled:camera.running});
   if(sample?.pose==='fist'&&previous!=='FIST_ARMING'&&previous!=='FIST_READY')adapter.stopNavigation();
   if(event?.type==='select'){
@@ -45,7 +45,7 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
  }});
  function drawHand(landmarks){const c=ui('hand-overlay'),video=ui('hand-video');Object.assign(c.style,{left:video.offsetLeft+'px',top:video.offsetTop+'px',width:video.offsetWidth+'px',height:video.offsetHeight+'px'});c.width=240;c.height=180;const context=c.getContext('2d');if(!landmarks)return;context.strokeStyle='#ddc47b';context.lineWidth=1;for(const chain of [[0,1,2,3,4],[0,5,6,7,8],[5,9,10,11,12],[9,13,14,15,16],[13,17,18,19,20],[0,17]]){context.beginPath();chain.forEach((id,i)=>{const p=landmarks[id];if(i===0)context.moveTo((1-p.x)*240,p.y*180);else context.lineTo((1-p.x)*240,p.y*180);});context.stroke();}context.fillStyle='#fff0a6';const tip=landmarks[8];context.beginPath();context.arc((1-tip.x)*240,tip.y*180,3,0,Math.PI*2);context.fill();}
  function panel(open){ui('gesture-panel').hidden=!open;ui('gesture-toggle').setAttribute('aria-expanded',String(open));document.body.classList.toggle('gesture-open',open);}
- function manualWind(dx=1,dy=-.12,x=.5,y=.5){const now=performance.now();if(stage.busy||now-lastManualWind<700)return;lastManualWind=now;adapter.ensureDust();wind.push({x,y,dx,dy},now);adapter.notice('星尘随风 · 天球坐标保持固定');}
+ function manualWind(dx=1,dy=-.12,x=.5,y=.5){const now=performance.now();if(stage.busy||now-lastManualWind<700)return;lastManualWind=now;wind.push({x,y,dx,dy},now);adapter.notice('星尘随风 · 天球坐标保持固定');}
  async function morph(){
   if(stage.busy||preparing)return;
   preparing=true;navigator.reset();adapter.stopNavigation();
@@ -63,10 +63,10 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
  document.addEventListener('pointermove',event=>{
   const now=performance.now(),x=event.clientX/innerWidth,y=event.clientY/innerHeight;let dx=0,dy=0;
   if(lastPointer){const dt=Math.max(.016,(now-lastPointer.t)/1000);dx=(x-lastPointer.x)/dt;dy=(y-lastPointer.y)/dt;}lastPointer={x,y,t:now};
-  if(stage.busy){stage.interact(x,y,now);return;}
+  if(stage.busy){stage.interact(x,y,now,Math.min(1.2,Math.hypot(dx,dy)*.9));return;}
   if(event.target.id==='sky'&&!adapter.blocked()&&!adapter.reducedMotion&&Math.hypot(dx,dy)>.08)wind.stir({x,y,dx:dx*.75,dy:dy*.75},now);
  });
- document.addEventListener('pointerdown',event=>{if(event.target.id!=='sky'||adapter.reducedMotion)return;const now=performance.now(),x=event.clientX/innerWidth,y=event.clientY/innerHeight;if(stage.busy)stage.ripple?.(x,y,now,1.0);else wind.ripple({x,y},now);});
+ document.addEventListener('pointerdown',event=>{if(event.target.id!=='sky'||adapter.reducedMotion)return;const now=performance.now(),x=event.clientX/innerWidth,y=event.clientY/innerHeight;if(stage.busy)stage.interact(x,y,now,1.3);else wind.ripple({x,y},now);});
  document.addEventListener('visibilitychange',()=>{navigator.reset();machine.reset(performance.now());camera.suspended=document.hidden||stage.busy;if(document.hidden&&stage.busy)returnToSky();});window.addEventListener('pagehide',()=>{resumeAfterPageShow=camera.running||camera.starting;camera.stop();});window.addEventListener('pageshow',event=>{if(event.persisted&&resumeAfterPageShow){resumeAfterPageShow=false;camera.start();}});
  // Exactly one automatic request per document. Panel and morph transitions reuse the stream.
  queueMicrotask(()=>camera.start());
