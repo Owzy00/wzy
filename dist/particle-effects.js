@@ -1,3 +1,4 @@
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence} from './cloud-field.js?v=13';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -19,7 +20,7 @@ export class WindField{
  }
 }
 export class MorphTimeline{
- constructor(){this.state='IDLE';this.started=0;this.returned=0;this.cooldownUntil=0;this.duration={gather:2800,hold:4200,return:2400};}
+ constructor(){this.state='IDLE';this.started=0;this.returned=0;this.cooldownUntil=0;this.duration={gather:4800,hold:4200,return:3000};}
  get busy(){return ['GATHERING','HOLDING','RETURNING'].includes(this.state);}
  start(now){if(this.busy||now<this.cooldownUntil)return false;this.started=now;this.state='GATHERING';this.earlyReturn=null;this.pendingDone=false;return true;}
  finish(now){if(!this.busy||this.state==='RETURNING')return;const current=this.sample(now);if(current.done){this.pendingDone=true;return;}this.returnFrom=current.amount;this.earlyReturn=now;this.state='RETURNING';}
@@ -47,68 +48,61 @@ export function createParticleBuffer(points,flowCount=96000){
   particleTemplates.set(flowCount,template);if(particleTemplates.size>2)particleTemplates.delete(particleTemplates.keys().next().value);
  }
  const data=template.slice(0,count*10);
- for(let i=0;i<points.length;i++){const p=points[i],o=(i+flowCount)*10;data[o]=p.x;data[o+1]=p.y;data[o+2]=p.z;const lift=Math.max(p.r,p.g,p.b)<75?1.8:1.25;data[o+3]=Math.min(1,p.r*lift/255*.8+.2);data[o+4]=Math.min(1,p.g*lift/255*.8+.15);data[o+5]=Math.min(1,p.b*lift/255*.8+.07);}
+
+ const tint=(p,o)=>{data[o]=p.x;data[o+1]=p.y;data[o+2]=p.z;data[o+3]=Math.min(1,p.r/255*1.05+.035);data[o+4]=Math.min(1,p.g/255*1.02+.025);data[o+5]=Math.min(1,p.b/255*.94+.015);if(!(data[o+9]>.5&&data[o+8]>=.89)){data[o+6]=clamp01(.5+p.x*.9+(data[o+6]-.5)*.12);data[o+7]=clamp01(.5+p.y*.9+(data[o+7]-.5)*.08);}};
+ // Every gathering particle has a surface destination; the cloud is not a separate backdrop.
+ if(points.length)for(let i=0;i<flowCount;i++){const o=i*10,p=points[(i*7919+13)%points.length];tint(p,o);data[o]+=(data[o+6]-.5)*.0014;data[o+1]+=(data[o+7]-.5)*.0014;}
+ for(let i=0;i<points.length;i++)tint(points[i],(i+flowCount)*10);
+
  return {data,count:points.length+flowCount,flowCount};
 }
 const FLOW_VERTEX=`
 precision highp float;
-attribute vec3 aTarget;attribute vec3 aColor;attribute vec3 aSeed;attribute float aFlow;
-uniform vec2 uViewport,uPointer,uOrigin;uniform vec3 uLayout;uniform float uTime,uAmount,uFormation,uRelease,uDpr,uReduced;
+attribute vec3 aTarget,aColor,aSeed;attribute float aFlow;
+uniform vec2 uViewport,uPointer,uOrigin;uniform vec3 uLayout;
+uniform float uTime,uAmount,uFormation,uRelease,uDpr,uReduced;
 uniform vec4 uRipple0,uRipple1,uRipple2;
-varying vec3 vColor;varying float vAlpha;
+varying vec3 vColor;varying float vAlpha,vSpark;
+${CLOUD_GLSL}
 vec2 wake(vec2 p,vec4 ripple){
  if(ripple.w<.001)return vec2(0.);
  float dim=min(uViewport.x,uViewport.y),radius=ripple.z*dim*.36;
- vec2 d=p-ripple.xy*uViewport;float dist=length(d),edge=(dist-radius)/(dim*.035);
- float strength=exp(-edge*edge)*exp(-ripple.z*1.7)*ripple.w;
- return d/max(1.,dist)*strength*dim*.045;
+ vec2 d=p-ripple.xy*uViewport;float edge=(length(d)-radius)/(dim*.04);
+ return d/max(1.,length(d))*exp(-edge*edge)*exp(-ripple.z*1.7)*ripple.w*dim*.027;
 }
 void main(){
- float motion=1.-uReduced,t=uTime*motion,depth=.45+aSeed.z*.9;
- vec2 pos;float size,glint=.88+.12*sin(t*1.5+aSeed.x*15.);
- if(aFlow>.5){
-  float x=fract(aSeed.x+t*(.017+aSeed.z*.014))*1.6-.3,y=aSeed.y;
-  if(aSeed.z<.64){
-   float band=floor(aSeed.y*11.),thread=fract(aSeed.y*11.)-.5;
-   y=.04+band*.088+sin(x*5.8+band*1.37-t*.28)*.07+sin(x*10.9-band+t*.19)*.025;
-   y+=thread*(.009+.027*pow(.5+.5*sin(x*5.+band-t*.2),2.));
-  }else{y+=sin(x*6.3+aSeed.z*8.+t*.18)*.035;}
-  pos=vec2(x*uViewport.x,y*uViewport.y)+uPointer*vec2(13.,9.)*depth;
-  float centerFade=smoothstep(.28,.46,x)*(1.-smoothstep(.63,.82,x));
-  float flowLight=aSeed.z<.64?.58:.22;
-  vAlpha=flowLight*(1.-centerFade*.88)*(.7+aSeed.z*.35)*smoothstep(0.,.28,uAmount);
-  size=(aSeed.z>.993?6.2:1.9+aSeed.z*.9)*uDpr*depth;
- }else{
-  float settle=smoothstep(aSeed.z*.22,.76+aSeed.z*.22,uFormation);
-  vec3 body=aTarget;float yaw=(sin(t*.31)*.045+uPointer.x*.14)*motion;
-  float bodyX=body.x*cos(yaw)+body.z*sin(yaw),bodyZ=body.z*cos(yaw)-body.x*sin(yaw);
-  float breath=sin(t*1.42)*.009*motion,cloth=.3+smoothstep(-.3,.18,body.y)*.7;
-  vec2 shape=vec2(bodyX,body.y)*(1.+breath);
-  shape+=vec2(sin(body.y*18.+t*.55),cos(body.x*17.-t*.48))*.0022*cloth*motion;
-  shape+=vec2(bodyZ*uPointer.x*.12,bodyZ*uPointer.y*.07);
-  vec2 target=uLayout.xy+shape*uLayout.z*(1.+bodyZ*.10);
-  // Broad independent source positions prevent rings or dense starting clumps.
-  vec2 source=vec2(aSeed.x*uViewport.x,aSeed.y*uViewport.y);
-  vec2 bend=mix(source,uOrigin,.19);bend+=vec2((aSeed.y-.5)*uViewport.x*.18,-uViewport.y*(.10+aSeed.z*.18));
-  float inv=1.-settle;
-  pos=inv*inv*source+2.*inv*settle*bend+settle*settle*target;
-  pos+=vec2(sin(settle*8.+aSeed.x*6.),cos(settle*6.+aSeed.y*7.))*sin(settle*3.14159)*uLayout.z*.035*motion;
-  // Returning stars travel out through a different, gently curling path.
-  vec2 destination=vec2(fract(aSeed.x+.23)*uViewport.x,fract(aSeed.y+.37)*uViewport.y);
-  vec2 escape=vec2(sin(aSeed.y*6.28),-1.)*uLayout.z*.12*sin(uRelease*3.14159)*motion;
-  pos=mix(pos,destination,uRelease)+escape;
-  vAlpha=mix(.11,.94,smoothstep(.12,.88,settle))*smoothstep(0.,.16,uFormation)*(1.-smoothstep(.18,1.,uRelease))*glint;
-  size=mix(.95,2.6+aSeed.z*.65,settle)*uDpr;
-  if(aSeed.x>.991){size*=1.9;vAlpha*=.78+.22*sin(t*2.+aSeed.y*30.);}
- }
- pos+=(wake(pos,uRipple0)+wake(pos,uRipple1)+wake(pos,uRipple2))*motion;
- vColor=mix(vec3(.94,.77,.46),aColor,aFlow>.5?1.:smoothstep(.18,.9,uFormation))*glint;
+ // Explicit morphing still has a quiet, changing flow under reduced motion.
+ float motion=mix(1.,.18,uReduced),loose=aFlow*step(.89,aSeed.z);
+ float settle=cloudSettle(aSeed,uFormation);
+ float breath=1.+sin(uTime*1.22)*.004*motion;
+ vec3 target=aTarget;target.xy*=breath;
+ target.x+=target.z*uPointer.x*.018*motion;
+ vec3 p=cloudPose(target,aSeed,uTime,uFormation,uRelease,loose,motion);
+ float zoom=mix(1.75,1.,smoothstep(.12,.95,uFormation));
+ float perspective=1./(1.+p.z*.32*(1.-settle));
+ vec2 center=mix(uOrigin,uLayout.xy,smoothstep(0.,.18,uAmount));
+ vec2 pos=center+p.xy*uLayout.z*zoom*perspective;
+ pos+=uPointer*vec2(46.,16.)*settle*(1.-uRelease)*motion;
+ float freeMotion=mix((1.-settle)*(1.-settle),1.,loose);
+ pos+=(wake(pos,uRipple0)+wake(pos,uRipple1)+wake(pos,uRipple2))*freeMotion*motion;
+ float glint=.90+.10*sin(uTime*1.4+aSeed.x*24.);
+ float visibility=smoothstep(0.,.10,uAmount)*(1.-smoothstep(.65,1.,uRelease));
+ float layer=mix(1.,.76,aFlow);
+ float alpha=mix(.72,.86,settle)*layer;
+ alpha=mix(alpha,mix(.34,.065,settle),loose);
+ vAlpha=alpha*visibility*glint;
+ float shade=.62+.38*(.5+.5*sin(p.z*9.+aSeed.y*3.));
+ vec3 gold=mix(vec3(.48,.29,.12),vec3(.96,.83,.58),shade);
+ vColor=mix(gold,aColor,settle*(1.-loose)*.86)*glint;
+ float size=mix(2.1,1.9,settle)*uDpr*perspective;
+ size*=mix(.70,1.3,aSeed.z);
+ vSpark=0.;if(loose>.5){float spark=fract(sin(dot(aSeed.xy,vec2(127.1,311.7)))*43758.5453);vSpark=step(.9985,spark);}if(vSpark>.5){size=(4.+aSeed.y*3.)*uDpr;vAlpha=.72*visibility;}
  gl_Position=vec4(pos.x/uViewport.x*2.-1.,1.-pos.y/uViewport.y*2.,0.,1.);
  gl_PointSize=max(1.,size);
 }`;
 const FLOW_FRAGMENT=`
-precision mediump float;varying vec3 vColor;varying float vAlpha;
-void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;float core=exp(-r*r*6.5),halo=exp(-r*r*2.8)*.20;gl_FragColor=vec4(vColor*(1.+core*.26),vAlpha*(core+halo));}
+precision mediump float;varying vec3 vColor;varying float vAlpha,vSpark;
+void main(){if(vSpark>.5){vec2 q=gl_PointCoord-.5;if(q.y<abs(q.x)*1.6-.48||q.y>.36)discard;gl_FragColor=vec4(vec3(1.,.83,.40)*(.65+q.x*.6+q.y*.4),vAlpha);return;}float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;float core=exp(-r*r*6.5),halo=exp(-r*r*2.8)*.20;gl_FragColor=vec4(vColor*(1.+core*.26),vAlpha*(core+halo));}
 `;
 export class StatueStage{
  constructor(){this.timeline=new MorphTimeline();this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.ripples=[];this.lastRipple=-Infinity;this.quality=1;this.frameMs=0;this.lastDraw=0;this.renderer='uninitialized';this.intervals=[];this.cadence={};this.opacity=0;this.prepared=new Map();}
@@ -128,7 +122,7 @@ export class StatueStage{
    this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2'])this.uniforms[n]=gl.getUniformLocation(program,n);
    gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
    for(const [name,size,offset]of [['aTarget',3,0],['aColor',3,12],['aSeed',3,24],['aFlow',1,36]]){const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,40,offset);}
-   gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.clearColor(0,0,0,0);this.renderer='webgl';
+   gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.clearColor(0,0,0,0);this.renderer='webgl';
    this.canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();this.error='WebGL context lost; Canvas fallback';this.initFallback();if(this.points)this.prepareFallback();});
   }catch(error){this.error=error.message;this.initFallback();}
  }
@@ -149,36 +143,53 @@ export class StatueStage{
   const packed=prepared.packed;this.particleCount=packed.count;
   if(this.gl){this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.buffer);this.gl.bufferData(this.gl.ARRAY_BUFFER,packed.data,this.gl.STATIC_DRAW);}else this.prepareFallback();
   // Decode/upload before starting the clock so the first frame never skips ahead.
-  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);return true;
+  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect','advected-cloud');return true;
  }
  finish(now){this.timeline.finish(now);}
  interact(x,y,now,strength=0){
   this.pointerTarget={x:(clamp01(x)-.5)*2,y:(clamp01(y)-.5)*2};
   if(strength>.18&&now-this.lastRipple>260){this.lastRipple=now;this.ripples.push({x:clamp01(x),y:clamp01(y),time:now,strength:Math.min(1.4,strength)});this.ripples=this.ripples.slice(-3);}
  }
+
  prepareFallback(){
   this.body=document.createElement('canvas');this.body.width=700;this.body.height=700;const c=this.body.getContext('2d');
-  for(const p of this.points){c.fillStyle=`rgb(${Math.min(255,p.r*1.3+24)},${Math.min(255,p.g*1.3+16)},${Math.min(255,p.b*1.3+7)})`;c.globalAlpha=.88;c.fillRect((p.x+.5)*700,(p.y+.5)*700,1.1,1.1);}
-  this.flow=document.createElement('canvas');this.flow.width=1500;this.flow.height=700;const f=this.flow.getContext('2d');
-  // Bake fine grain once. Each fallback frame composites one field and one statue.
-  for(let i=0;i<26000;i++){const x=(i*.61803398875)%1,seed=(i*.754877666)%1,band=i%6,y=.49+(band-2.5)*.118+Math.sin(x*6.4+band*1.7)*.088+Math.sin(x*13.7-band*2.1)*.032+(seed-.5)*.027;f.fillStyle=i%3?'#d8b780':'#f1d7a5';f.globalAlpha=.25+seed*.4;f.fillRect(x*1500,y*700,.8,.8);}
+  for(const p of this.points){c.fillStyle=`rgb(${Math.min(255,p.r*1.05+9)},${Math.min(255,p.g*1.02+6)},${Math.min(255,p.b*.94+4)})`;c.globalAlpha=.82;c.fillRect((p.x+.5)*700,(p.y+.5)*700,.9,.9);}
+  const packed=this.prepare(this.item).packed,data=packed.data,count=Math.min(12000,packed.count);
+  this.fallbackGroups=Array.from({length:12},()=>[]);
+  for(let i=0;i<count;i++){const index=Math.floor(i*packed.count/count),o=index*10,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
+   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:data[o+9]>.5&&seed.z>=.89});
+  }
+  this.fallbackPose={};this.fallbackPalette=Array.from({length:12},(_,i)=>`rgb(${138+i*9},${102+i*9},${56+i*8})`);
  }
  drawFallback(l,now,sample,reduced){
-  const c=this.context;c.clearRect(0,0,l.width,l.height);const t=reduced?0:(now-this.animationStarted)*.0003;
-  c.globalAlpha=smooth(sample.amount/.4)*.24;c.drawImage(this.flow,-l.width*.05+Math.sin(t*.5)*l.width*.025,Math.sin(t*.7)*l.height*.01,l.width*1.1,l.height);
-  const settle=smooth(sample.formation),scale=1+(reduced?0:Math.sin(t*4.73)*.009)+(1-settle)*.12+sample.release*.12,size=l.size*scale,left=l.cx-size/2,top=l.cy-size/2-sample.release*l.height*.08;
-  c.save();c.globalAlpha=settle*(1-sample.release);c.drawImage(this.body,left+this.pointer.x*4,top+this.pointer.y*2,size,size);c.restore();
-  c.globalAlpha=1;
+  const c=this.context;c.clearRect(0,0,l.width,l.height);
+  const time=(now-this.animationStarted)/1000,motion=reduced?.18:1,solid=smooth((sample.formation-.62)/.38)*(1-sample.release);
+  const centerEase=smooth(sample.presence/.18),cx=this.origin.x*(1-centerEase)+l.cx*centerEase,cy=this.origin.y*(1-centerEase)+l.cy*centerEase;
+  const zoom=1.75-.75*smooth((sample.formation-.12)/.83),p=this.fallbackPose;
+  for(let group=0;group<12;group++){
+   c.fillStyle=this.fallbackPalette[group];
+   for(const particle of this.fallbackGroups[group]){
+    if(solid>.95&&!particle.loose)continue;
+    cloudPose(particle.target,particle.seed,time,sample.formation,sample.release,particle.loose,motion,p);
+    const settled=cloudSettle(particle.seed,sample.formation),perspective=1/(1+p.z*.32*(1-settled));
+    const x=cx+p.x*l.size*zoom*perspective+this.pointer.x*46*settled*(1-sample.release)*motion;
+    const y=cy+p.y*l.size*zoom*perspective+this.pointer.y*16*settled*(1-sample.release)*motion;
+    c.globalAlpha=sample.presence*(1-smooth((sample.release-.65)/.35))*(particle.loose?.19:(.38+.28*settled)*(1-solid*.85));
+    const size=(.75+particle.seed.z*.55)*perspective;c.fillRect(x,y,size,size);
+   }
+  }
+  const size=l.size*(1+Math.sin(time*1.22)*.004*motion);
+  c.globalAlpha=solid;c.drawImage(this.body,l.cx-size/2+this.pointer.x*46*motion,l.cy-size/2+this.pointer.y*16*motion,size,size);c.globalAlpha=1;
  }
  draw(ctx,now,width,height,anchor,reduced=false){
   const started=performance.now(),frameDelta=Math.max(0,Math.min(60,now-this.lastDraw));if(this.busy&&this.lastDraw){const dt=now-this.lastDraw;if(dt>0){this.intervals.push(dt);if(this.intervals.length>180)this.intervals.shift();}}this.lastDraw=now;
   const sample=this.timeline.sample(now);
-  if(sample.done){if(this.canvas){this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
-  const l=this.layout(width,height);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
+  sample.presence=cloudPresence(sample.formation||0)*(1-(sample.release||0));if(sample.done){this.ripples=[];if(this.canvas){this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
+  const phase=sample.release>0?'release':sample.formation<.08?'emerging':sample.formation<.3?'cloud':sample.formation<.9?'silhouette':'formed';if(this.phase!==phase){this.phase=phase;this.canvas.setAttribute?.('data-phase',phase);this.canvas.setAttribute?.('data-phase-time',String(Math.round((now-this.animationStarted)/10)/100));}const l=this.layout(width,height);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
   const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
-  this.opacity=sample.amount;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
+  this.opacity=sample.presence;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
   this.ripples=this.ripples.filter(r=>now-r.time<2500);
-  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.amount);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
+  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
   else{this.context.setTransform(dpr,0,0,dpr,0,0);this.drawFallback(l,now,sample,reduced);}
   this.frameMs=performance.now()-started;
   if(this.intervals.length){const sorted=[...this.intervals].sort((a,b)=>a-b),mean=this.intervals.reduce((a,b)=>a+b)/this.intervals.length;this.cadence={fps:Math.round(1000/mean),p95Ms:Math.round(sorted[Math.floor(sorted.length*.95)]*10)/10,samples:sorted.length};}

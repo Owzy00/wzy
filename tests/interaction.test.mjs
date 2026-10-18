@@ -34,8 +34,8 @@ test('one camera session supports navigation, fist selection, palm morph and aut
  assert.equal(s.counts().selectedCount,1);assert.equal(s.counts().morphs,0);assert.equal(s.counts().panDistance,moved);
  for(let t=1150;t<=1400;t+=50)s.emit('open',base+t);
  assert.equal(s.counts().morphs,1);assert.equal(s.experience.busy,true);s.experience.beforeFrame(base+1500);assert.equal(s.camera.suspended,true);assert.equal(s.counts().stops,0);
- const hold=s.stage.timeline.started+3500;s.experience.draw(null,hold,1000,800,null,false);s.experience.beforeFrame(hold+16);assert.equal(s.camera.suspended,false);const touches=s.counts().touches;s.emit('open',hold+50);assert.equal(s.counts().touches,touches+1);assert.equal(s.counts().morphs,1);
- const end=s.stage.timeline.started+9500;s.experience.draw(null,end,1000,800,null,false);s.experience.beforeFrame(end+16);
+ const hold=s.stage.timeline.started+s.stage.timeline.duration.gather+700;s.experience.draw(null,hold,1000,800,null,false);s.experience.beforeFrame(hold+16);assert.equal(s.camera.suspended,false);const touches=s.counts().touches;s.emit('open',hold+50);assert.equal(s.counts().touches,touches+1);assert.equal(s.counts().morphs,1);
+ const end=s.stage.timeline.started+s.stage.timeline.duration.gather+s.stage.timeline.duration.hold+s.stage.timeline.duration.return+100;s.experience.draw(null,end,1000,800,null,false);s.experience.beforeFrame(end+16);
  assert.equal(s.experience.busy,false);assert.equal(s.camera.suspended,false);assert.equal(s.camera.running,true);assert.equal(s.counts().restores,1);assert.equal(s.counts().starts,1);
  for(let t=0;t<=1000;t+=100){s.emit('open',end+100+t);s.experience.beforeFrame(end+100+t);}assert.equal(s.counts().morphs,1);
 }));
