@@ -1,0 +1,15 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>星野 · 手掌拖动验证</title>
+<style>body{margin:0;background:#080b0f;color:#dfd2ac;font:14px system-ui}main{padding:24px;position:relative;z-index:2}h1{font:22px serif}button{margin:4px;padding:10px;background:#10171d;border:1px solid #9c8653;color:#e2c982}canvas{position:fixed;inset:0}output{display:block;margin:16px 0;color:#e4cb83}p{max-width:720px;color:#9eacb7}</style>
+<canvas id="sky"></canvas><main><h1>手掌像鼠标一样拖动画布</h1><button id="slow">慢速拖到同一位置</button><button id="fast">快速拖到同一位置</button><button id="loop">拖动后原路返回</button><output id="readout">准备中</output><p>模拟张掌数据通过实际 HandNavigator 与天文投影函数回放。不申请摄像头，不代表真人手感实测。十字固定，亮星随画布移动；停手后不继续漂移。</p></main>
+<script type="module">
+import {HandNavigator} from './gesture-core.js?v=20';
+import {panSky,projectAtlas} from './astronomy.js?v=20';
+const c=document.querySelector('#sky'),ctx=c.getContext('2d'),out=document.querySelector('#readout'),camera={ra:3,dec:0,zoom:1,fov:1.5};let viewport;
+function paint(){c.width=innerWidth;c.height=innerHeight;viewport={w:innerWidth*.72,h:innerHeight*.55,cx:innerWidth*.5,cy:innerHeight*.60};ctx.fillStyle='#080b0f';ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle='#364047';ctx.beginPath();ctx.moveTo(viewport.cx-16,viewport.cy);ctx.lineTo(viewport.cx+16,viewport.cy);ctx.moveTo(viewport.cx,viewport.cy-16);ctx.lineTo(viewport.cx,viewport.cy+16);ctx.stroke();for(let i=0;i<300;i++){const ra=3+(i*.6180339%1-.5)*6,dec=(i*.7548776%1-.5)*3,p=projectAtlas(ra,dec,camera,viewport);ctx.fillStyle=i%11?'#879aad':'#e4c46c';ctx.fillRect(p.x,p.y,i%11?1:3,i%11?1:3);}const p=projectAtlas(3,0,camera,viewport);ctx.fillStyle='#ffe19a';ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fill();}
+function replay(kind){camera.ra=3;camera.dec=0;paint();const n=new HandNavigator(),duration=kind==='fast'?300:1200;let dx=0,dy=0,endX=0,drift=0;
+ for(let t=0;t<=duration+350;t+=10){const f=Math.min(1,t/duration),travel=kind==='loop'?(f<.5?f*2:2-f*2):f;if(t%50===0)n.feed({pose:'open',palm:{x:.35+.18*travel,y:.5+.06*travel},span:.15},t);const d=n.step(t);dx+=d.dx;dy+=d.dy;Object.assign(camera,panSky(camera,'atlas',viewport,d.dx,d.dy));if(t===duration+200)endX=dx;if(t>duration+200)drift+=Math.abs(d.dx)+Math.abs(d.dy);}
+ paint();out.textContent='已拖动 '+(dx*100).toFixed(2)+'% / '+(dy*100).toFixed(2)+'% · 停手漂移 '+drift.toFixed(6);
+ out.dataset.mode=kind;out.dataset.dx=dx.toFixed(5);out.dataset.dy=dy.toFixed(5);out.dataset.drift=drift.toFixed(6);
+}
+for(const mode of ['slow','fast','loop'])document.querySelector('#'+mode).onclick=()=>replay(mode);addEventListener('resize',paint);replay('slow');
+</script></html>

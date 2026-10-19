@@ -17,9 +17,13 @@ test('busy and disabled reject actions; no target and external selection changes
 test('lost hand, long gaps and abrupt hand movement discard a ready fist',()=>{for(const kind of ['lost','gap','jump']){const m=new GestureMachine();for(let t=0;t<600;t+=40)m.update(sample('fist'),t,state);assert.equal(m.armed,true);if(kind==='lost')m.update(null,600,state);const start=kind==='gap'?1400:640;for(let t=start;t<start+700;t+=40)assert.notEqual(m.update(sample('open',kind==='jump'?.95:.62),t,state)?.type,'morph');assert.equal(m.armed,false);}});
 test('holding open cannot retrigger and a fresh fist works after cooldown',()=>{const m=new GestureMachine();assert.equal(fistThenOpen(m).filter(e=>e.type==='morph').length,1);const until=m.cooldownUntil;for(let t=1040;t<until+700;t+=40)assert.equal(m.update(sample('open'),t,state),null);assert.equal(fistThenOpen(m,{start:until+800}).filter(e=>e.type==='morph').length,1);});
 test('duplicate or backwards timestamps cannot advance the recognizer',()=>{const m=new GestureMachine();m.update(sample('fist'),100,state);const before=JSON.stringify(m);m.update(sample('open'),100,state);m.update(sample('open'),90,state);assert.equal(JSON.stringify(m),before);});
-test('navigation follows deliberate palm motion with bounded smooth per-frame displacement',()=>{const n=new HandNavigator(),deltas=[];for(let t=0;t<=1000;t+=10){if(t%50===0)n.feed(sample('open',.25+t*.0003,.3+t*.0001),t);deltas.push(n.step(t));}const dx=deltas.reduce((s,d)=>s+d.dx,0),dy=deltas.reduce((s,d)=>s+d.dy,0);assert.ok(dx>.35&&dx<.5);assert.ok(dy>.09&&dy<.15);assert.ok(deltas.every(d=>Math.abs(d.dx)<.01&&Math.abs(d.dy)<.01));assert.ok(deltas[6].dx<deltas[50].dx);});
+test('palm dragging follows measured displacement one-to-one and settles without inertia',()=>{
+ const n=new HandNavigator(),deltas=[];for(let t=0;t<=1250;t+=10){if(t%50===0)n.feed(sample('open',.25+Math.min(t,1000)*.0003,.3+Math.min(t,1000)*.0001),t);deltas.push(n.step(t));}
+ assert.ok(Math.abs(deltas.reduce((s,d)=>s+d.dx,0)-.3)<.0001);assert.ok(Math.abs(deltas.reduce((s,d)=>s+d.dy,0)-.1)<.0001);
+ assert.ok(deltas.every(d=>d.dx>=0&&d.dx<.012));assert.deepEqual(n.step(1260),{dx:0,dy:0});
+});
 test('stationary jitter, new hands and closed fists cannot jump or drift the sky',()=>{const n=new HandNavigator();for(let t=0;t<=1000;t+=50){n.feed(sample('open',.5+(t%100?.0005:0)),t);assert.deepEqual(n.step(t),{dx:0,dy:0});}n.feed(sample('open',.9),1100);assert.deepEqual(n.step(1100),{dx:0,dy:0});n.feed(null,1150);n.feed(sample('open',.2),1200);assert.deepEqual(n.step(1200),{dx:0,dy:0});n.feed(sample('open',.23),1250);assert.ok(n.step(1250).dx>0);n.feed(sample('fist'),1300);assert.deepEqual(n.step(1300),{dx:0,dy:0});});
-test('a stopped camera stream damps navigation to a complete stop',()=>{const n=new HandNavigator();n.feed(sample('open',.3),0);n.step(0);n.feed(sample('open',.35),100);assert.ok(n.step(100).dx>0);for(let t=120;t<700;t+=20)n.step(t);assert.deepEqual(n.step(700),{dx:0,dy:0});n.feed(sample('open',.8),900);assert.deepEqual(n.step(900),{dx:0,dy:0});});
+test('a stopped camera stream stops without extrapolating palm velocity',()=>{const n=new HandNavigator();n.feed(sample('open',.3),0);n.step(0);n.feed(sample('open',.35),100);assert.ok(n.step(100).dx>0);for(let t=120;t<700;t+=20)n.step(t);assert.deepEqual(n.step(700),{dx:0,dy:0});n.feed(sample('open',.8),900);assert.deepEqual(n.step(900),{dx:0,dy:0});});
 
 test('landmark input rejects two hands, low confidence and invalid coordinates',()=>{const hand=Array.from({length:21},(_,i)=>({x:.3+(i%5)*.08,y:.3+Math.floor(i/5)*.08,z:0}));assert.equal(describeHand(hand,.74,1),null);assert.equal(describeHand(hand,.99,2),null);hand[2].x=NaN;assert.equal(describeHand(hand,.99,1),null);});
 test('valid landmark poses distinguish open palm, index pointing and a closed fist',()=>{const hand=Array.from({length:21},()=>({x:.5,y:.85,z:0}));hand[0]={x:.5,y:.9};for(const [i,mcp]of [5,9,13,17].entries()){const x=.35+i*.12;hand[mcp]={x,y:.7};hand[mcp+1]={x,y:.5};hand[mcp+2]={x,y:.35};hand[mcp+3]={x,y:.22};}assert.equal(describeHand(hand,.95,1).pose,'open');for(const mcp of [9,13,17])hand[mcp+3]={x:hand[mcp].x,y:.78};const point=describeHand(hand,.95,1);assert.equal(point.pose,'point');assert.equal(point.tip.x,.65);hand[8]={x:hand[5].x,y:.78};assert.equal(describeHand(hand,.95,1).pose,'fist');});
@@ -121,4 +125,12 @@ test('Canvas held particles are displaced by a ripple and the intact body cache 
  stage.ripples=[{x:.45,y:.52,time:5000,strength:1.2}];stage.drawFallback(layout,5500,sample,false);
  const home=layout.cx+.1*layout.size*(1+Math.sin(5.5*1.22)*.007);assert.ok(dots.at(-1).x>home+5);assert.ok(bodies.at(-1)<.6);
  const count=dots.length;stage.drawFallback(layout,7600,sample,false);assert.equal(dots.length,count);assert.equal(bodies.at(-1),1);
+});
+
+test('slow and fast palm drags with the same endpoints reach the same canvas position',()=>{
+ const totals=[];for(const duration of [300,1200]){const n=new HandNavigator();let sum=0;for(let t=0;t<=duration+250;t+=10){if(t%50===0)n.feed(sample('open',.3+.18*Math.min(1,t/duration)),t);sum+=n.step(t).dx;}totals.push(sum);}
+ assert.ok(Math.abs(totals[0]-.18)<.0001);assert.ok(Math.abs(totals[0]-totals[1])<.0001);
+});
+test('a closed-loop palm drag returns to its initial position with no speed-dependent drift',()=>{
+ const n=new HandNavigator();let total=0;for(let t=0;t<=1500;t+=10){if(t%50===0){const p=t<600?t/600:t<1200?2-t/600:0;n.feed(sample('open',.3+.15*p),t);}total+=n.step(t).dx;}assert.ok(Math.abs(total)<.0001);
 });

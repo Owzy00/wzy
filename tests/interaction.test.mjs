@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {initExperience} from '../dist/experience.js';
 import {MorphTimeline,StatueStage} from '../dist/particle-effects.js';
 import {describeHand} from '../dist/gesture-core.js';
-import {handLandmarks,tapFrames} from './hand-fixtures.mjs';
+import {handLandmarks,tipIds} from './hand-fixtures.mjs';
 
 // Exercise the real experience coordinator with camera callbacks and the real timeline.
 // The small DOM facade lets the test control visibility and permission errors without a camera.
@@ -24,7 +24,7 @@ async function scene(run){
  try{
   const experience=initExperience(adapter,{cameraFactory:(video,c)=>{callbacks=c;return camera;},stageFactory:()=>stage});
   await new Promise(resolve=>setImmediate(resolve));
-  await run({styles,experience,stage,camera,element,listeners,classes,callbacks,counts:()=>({starts,stops,morphs,selectedCount,panDistance,restores,touches}),emit:(pose,time,x=.5)=>callbacks.onSample(pose?{pose,palm:{x,y:.5},fingers:{index:{x:x+.02,y:.5,extended:true},ring:{x:x-.02,y:.5,extended:true}},span:.15}:null,time,null,pose?1:0)});
+  await run({styles,experience,stage,camera,element,listeners,classes,callbacks,counts:()=>({starts,stops,morphs,selectedCount,panDistance,restores,touches}),emit:(pose,time,x=.5)=>callbacks.onSample(pose?{pose,palm:{x,y:.5},fingers:{index:{x:x+.02,y:.5,extended:true},ring:{x:x-.02,y:.5,extended:true}},span:.15,confidence:.95}:null,time,null,pose?1:0)});
  }finally{for(const [name,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 }
 
@@ -56,20 +56,17 @@ test('prepared particle data is reused and bounded to two mansions',()=>{
  assert.equal(stage.prepare(item(0)),first);stage.prepare(item(1));stage.prepare(item(2));assert.equal(stage.prepared.size,2);assert.equal(stage.prepared.has(0),false);assert.ok(first.packed.data.byteLength<4000000);
 });
 
-test('real coordinator emits only completed fingertip taps during generation and holding',async()=>scene(async s=>{
+test('real coordinator supports every moving fingertip during generation and holding',async()=>scene(async s=>{
  const renderer=new StatueStage();renderer.timeline=s.stage.timeline;renderer.currentLayout=renderer.layout(1000,800);renderer.bounds={minX:-.3,maxX:.3,minY:-.48,maxY:.48};s.stage.interactFingers=(...args)=>renderer.interactFingers(...args);
  await s.element('morph-trigger').onclick();const start=s.stage.timeline.started;
- function emit(time,options={},count=1){s.experience.draw(null,time,1000,800,null,false);s.experience.beforeFrame(time);s.callbacks.onSample(describeHand(handLandmarks(options),.96,count),time,null,count);}
- for(let i=0;i<5;i++)emit(start+500+i*100,{dx:i*.01});
- assert.equal(renderer.handRippleCount||0,0);
- for(const [offset,finger]of [[1000,'index'],[2000,'ring']])for(const [t,b]of tapFrames)emit(start+offset+t,{[finger]:b});
- assert.deepEqual(renderer.fingerRippleCount,{index:1,ring:1});assert.equal(s.camera.suspended,false);
- const hold=start+s.stage.timeline.duration.gather;
- for(const [t,b]of tapFrames)emit(hold+100+t,{index:b,ring:b});
- assert.deepEqual(renderer.fingerRippleCount,{index:2,ring:2});assert.ok(renderer.ripples.every(r=>r.strength>=.65&&r.spread===.55));const held=renderer.handRippleCount;
- for(const [t,b]of tapFrames.slice(0,6))emit(hold+1000+t,{index:b});
- emit(hold+1350,{index:.16},2);emit(hold+1420);assert.equal(renderer.handRippleCount,held);
- const leave=hold+s.stage.timeline.duration.hold+100;emit(leave);assert.equal(s.camera.suspended,true);
- for(const [t,b]of tapFrames)emit(leave+100+t,{ring:b});assert.equal(renderer.handRippleCount,held);
+ function emit(time,points,count=1){s.experience.draw(null,time,1000,800,null,false);s.experience.beforeFrame(time);s.callbacks.onSample(describeHand(points,.96,count),time,null,count);}
+ for(const [i,finger]of Object.keys(tipIds).entries()){
+  const time=start+200+i*1450,p=handLandmarks();s.callbacks.onSample(null,time-1,null,0);emit(time,p);p[tipIds[finger]].x+=.025;emit(time+100,p);
+ }
+ for(const finger of Object.keys(tipIds))assert.equal(renderer.fingerRippleCount[finger],1);assert.equal(s.camera.suspended,false);
+ const p=handLandmarks(),gathered=renderer.handRippleCount;s.callbacks.onSample(null,start+6950,null,0);emit(start+7000,p);for(const q of p)q.x+=.02;emit(start+7050,p);assert.equal(renderer.handRippleCount,gathered);
+ p[12].x+=.02;emit(start+7650,p);assert.equal(renderer.handRippleCount,gathered+1);assert.ok(renderer.ripples.every(r=>r.strength<=.95&&r.spread===.55));const held=renderer.handRippleCount;
+ emit(start+7800,p,2);emit(start+7850,p);assert.equal(renderer.handRippleCount,held);
+ const leave=start+s.stage.timeline.duration.gather+s.stage.timeline.duration.hold+100;emit(leave,p);assert.equal(s.camera.suspended,true);p[12].x+=.03;emit(leave+100,p);assert.equal(renderer.handRippleCount,held);
  assert.equal(s.counts().morphs,1);assert.equal(s.counts().selectedCount,0);assert.equal(s.counts().starts,1);assert.equal(s.counts().stops,0);
 }));

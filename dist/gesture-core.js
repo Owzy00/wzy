@@ -1,13 +1,19 @@
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-const vector3=(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:(a.z||0)-(b.z||0)});
+export const FINGER_RIPPLE_INTERVAL=300;
+export const FINGER_TIPS=Object.freeze({thumb:4,index:8,middle:12,ring:16,pinky:20});
+const tipDistance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,((a.z||0)-(b.z||0))*.4);
+const sub3=(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:(a.z||0)-(b.z||0)});
+const dot3=(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z;
 const length3=v=>Math.hypot(v.x,v.y,v.z);
-// Reach along the finger's palm-local axis: translation, scale and hand rotation
-// do not become taps. Depth landmarks also capture a finger bending toward camera.
-function fingerBend(p,tip){
- const base=p[tip-3],axis=vector3(base,p[0]),reach=vector3(p[tip],base);
- const bones=length3(vector3(p[tip-2],base))+length3(vector3(p[tip-1],p[tip-2]))+length3(vector3(p[tip],p[tip-1]));
- return 1-Math.max(-1,Math.min(1,(reach.x*axis.x+reach.y*axis.y+reach.z*axis.z)/Math.max(.00001,length3(axis)*bones)));
+function palmFrame(p){
+ const across=sub3(p[17],p[5]),size=length3(across),x={x:across.x/size,y:across.y/size,z:across.z/size};
+ const up=sub3(p[9],p[0]),along=dot3(up,x),orth={x:up.x-x.x*along,y:up.y-x.y*along,z:up.z-x.z*along},n=length3(orth);
+ if(size<.045||n<.015)return null;
+ const y={x:orth.x/n,y:orth.y/n,z:orth.z/n},z={x:x.y*y.z-x.z*y.y,y:x.z*y.x-x.x*y.z,z:x.x*y.y-x.y*y.x};
+ const origin=[0,5,9,13,17].reduce((a,i)=>({x:a.x+p[i].x/5,y:a.y+p[i].y/5,z:a.z+(p[i].z||0)/5}),{x:0,y:0,z:0});
+ return tip=>{const d=sub3(tip,origin);return {x:dot3(d,x)/size,y:dot3(d,y)/size,z:dot3(d,z)/size};};
 }
+const localDistance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,(a.z-b.z)*.6);
 export function describeHand(landmarks,confidence=1,handCount=1){
  if(handCount!==1||confidence<.75||!landmarks||landmarks.length!==21||landmarks.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return null;
  const span=distance(landmarks[5],landmarks[17]);if(span<.045||span>.55)return null;
@@ -16,7 +22,8 @@ export function describeHand(landmarks,confidence=1,handCount=1){
  const folded=tips.map(t=>distance(landmarks[t],wrist)<distance(landmarks[t-2],wrist)*1.18&&distance(landmarks[t],landmarks[t-3])<span*.90);
  const count=extended.filter(Boolean).length;
  const palm=[0,5,9,13,17].reduce((s,i)=>({x:s.x+landmarks[i].x/5,y:s.y+landmarks[i].y/5}),{x:0,y:0});
- const fingers={index:{x:1-landmarks[8].x,y:landmarks[8].y,extended:extended[0],bend:fingerBend(landmarks,8)},ring:{x:1-landmarks[16].x,y:landmarks[16].y,extended:extended[2],bend:fingerBend(landmarks,16)}};
+ const local=palmFrame(landmarks);if(!local)return null;
+ const fingers=Object.fromEntries(Object.entries(FINGER_TIPS).map(([name,id])=>[name,{x:1-landmarks[id].x,y:landmarks[id].y,z:Number.isFinite(landmarks[id].z)?landmarks[id].z:0,local:local(landmarks[id])}]));
  return {pose:count>=3?'open':count===0&&folded.every(Boolean)?'fist':extended[0]&&count===1?'point':'neutral',palm:{x:1-palm.x,y:palm.y},tip:{x:fingers.index.x,y:fingers.index.y},fingers,confidence,span};
 }
 export class GestureMachine{
@@ -69,85 +76,66 @@ export class GestureMachine{
  }
 }
 
-// Estimate hand velocity at camera cadence; integrate and damp it at display cadence.
-// Reacquisition establishes an anchor and never turns a new hand position into a jump.
+// Position-anchored dragging, like a pointer held on the canvas.
+// Display frames settle toward a measured position; they never integrate velocity.
 export class HandNavigator{
  constructor(){this.reset();}
- reset(){this.previous=null;this.velocity={x:0,y:0};this.target={x:0,y:0};this.frameTime=null;this.lastSample=-1;}
+ reset(){this.previous=null;this.anchor=null;this.accepted=null;this.target={x:0,y:0};this.applied={x:0,y:0};this.motion={x:0,y:0};this.frameTime=null;this.lastSample=-1;}
  feed(sample,now){
   if(!sample||sample.pose!=='open'){this.reset();return;}
   if(now<=this.lastSample)return;
-  const old=this.previous;this.lastSample=now;this.previous={...sample.palm,t:now,span:sample.span};
-  if(!old||now-old.t>400){this.velocity={x:0,y:0};this.target={x:0,y:0};return;}
-  const dx=sample.palm.x-old.x,dy=sample.palm.y-old.y,travel=Math.hypot(dx,dy),ratio=sample.span&&old.span?sample.span/old.span:1;
-  if(travel>.18||ratio<.6||ratio>1.6){this.velocity={x:0,y:0};this.target={x:0,y:0};return;}
-  const dt=Math.max(.025,(now-old.t)/1000),gain=travel<.0018?0:Math.min(1,(travel-.0018)/.004);
-  this.target={x:Math.max(-.85,Math.min(.85,dx/dt*gain)),y:Math.max(-.7,Math.min(.7,dy/dt*gain))};
+  let old=this.previous;
+  const ratio=sample.span&&old?.span?sample.span/old.span:1;
+  if(old&&(now-old.t>400||distance(sample.palm,old)>.18||ratio<.6||ratio>1.6)){this.reset();old=null;}
+  this.lastSample=now;this.previous={...sample.palm,t:now,span:sample.span};
+  if(!old){this.anchor={...sample.palm};this.accepted={...sample.palm};this.frameTime=now;return;}
+  const dt=Math.max(.025,(now-old.t)/1000);
+  this.motion={x:(sample.palm.x-old.x)/dt,y:(sample.palm.y-old.y)/dt};
+  if(distance(sample.palm,this.accepted)<.0018)return;
+  this.accepted={...sample.palm};
+  this.target={x:sample.palm.x-this.anchor.x,y:sample.palm.y-this.anchor.y};
  }
  step(now){
+  if(this.lastSample<0||now-this.lastSample>220){this.applied={...this.target};this.frameTime=now;return {dx:0,dy:0};}
   const dt=this.frameTime===null?0:Math.max(0,Math.min(.05,(now-this.frameTime)/1000));this.frameTime=now;
-  if(this.lastSample<0||now-this.lastSample>220)this.target={x:0,y:0};
-  if(this.lastSample<0||now-this.lastSample>450){this.velocity={x:0,y:0};return {dx:0,dy:0};}
-  const ease=1-Math.exp(-dt/.075);this.velocity.x+=(this.target.x-this.velocity.x)*ease;this.velocity.y+=(this.target.y-this.velocity.y)*ease;
-  return {dx:this.velocity.x*dt*1.65,dy:this.velocity.y*dt*1.4};
+  const ease=1-Math.exp(-dt/.035),next={x:this.applied.x+(this.target.x-this.applied.x)*ease,y:this.applied.y+(this.target.y-this.applied.y)*ease};
+  for(const axis of ['x','y'])if(Math.abs(this.target[axis]-next[axis])<.0001)next[axis]=this.target[axis];
+  const delta={dx:next.x-this.applied.x,dy:next.y-this.applied.y};this.applied=next;return delta;
  }
 }
 
-// A tap is an observed press AND rebound, never a fingertip displacement.
-// Ready -> pressing -> pressed -> rebound; each finger owns its cooldown.
-export class FingerTapInput{
- constructor(){this.lastPulse=-Infinity;this.reset();}
- reset(){this.previous=null;this.state='WAITING';this.readySince=null;this.readySamples=0;this.baseline=null;this.pressedSamples=0;this.pressSince=null;this.peak=0;}
- feed(sample,now,enabled=true){
-  const p=sample?.point;
-  if(!enabled||!p||!Number.isFinite(now)||!Number.isFinite(p.x)||!Number.isFinite(p.y)||!Number.isFinite(p.bend)||p.x<0||p.x>1||p.y<0||p.y>1||!Number.isFinite(sample.confidence)||sample.confidence<.75||!sample.palm||!Number.isFinite(sample.palm.x)||!Number.isFinite(sample.palm.y)){this.reset();return null;}
-  const old=this.previous;if(old&&now<=old.t)return null;
-  const ratio=sample.span&&old?.span?sample.span/old.span:1;
-  if(old&&(now-old.t>400||distance(p,old)>.20||distance(sample.palm,old.palm)>.16||ratio<.7||ratio>1.4))this.reset();
-  this.previous={x:p.x,y:p.y,t:now,span:sample.span,palm:{...sample.palm}};
-  const output={x:p.x,y:p.y,strength:0,tap:false};
-  if(now-this.lastPulse<480)return output;
-  if(this.state==='WAITING'){
-   if(!p.extended){this.readySince=null;this.readySamples=0;this.baseline=null;return output;}
-   if(this.baseline===null||Math.abs(p.bend-this.baseline)>.06){this.baseline=p.bend;this.readySince=now;this.readySamples=1;return output;}
-   this.readySamples++;
-   if(now-this.readySince>=100&&this.readySamples>=2)this.state='READY';
-   return output;
-  }
-  const delta=p.bend-this.baseline;
-  if(this.state==='READY'){
-   if(delta<.10){this.baseline+=(p.bend-this.baseline)*.08;return output;}
-   this.state='PRESSING';this.pressSince=now;this.peak=delta;
-  }
-  this.peak=Math.max(this.peak,delta);
-  const age=now-this.pressSince;
-  if(age>850){this.reset();return output;}
-  if(this.state==='PRESSING'){
-   if(delta<.07){this.reset();return output;}
-   if(age>450){this.reset();return output;}
-   if(delta>=.22){this.state='PRESSED';this.pressedSamples=1;this.pressPoint={x:p.x,y:p.y};this.pressedAt=now;}
-   return output;
-  }
-  if(delta>=.17){this.pressedSamples++;this.pressPoint={x:p.x,y:p.y};}
-  if(delta<=.07&&p.extended){
-   const tapped=this.pressedSamples>=2&&now-this.pressedAt>=50;
-   const point=this.pressPoint,peak=this.peak;this.reset();
-   if(tapped){this.lastPulse=now;return {...point,strength:Math.min(.95,.65+peak*.35),tap:true};}
-  }
-  return output;
- }
-}
+// Fingertip motion is measured in a palm-local 3D frame: moving the whole hand
+// does not stir particles. Up to five independent fingers are forwarded per sample.
+// Recognition and reacquisition only establish anchors.
 export class FingerParticleInput{
- constructor(){this.tracks={index:new FingerTapInput(),ring:new FingerTapInput()};}
- reset(){for(const track of Object.values(this.tracks))track.reset();}
- get previous(){return this.tracks.index.previous||this.tracks.ring.previous;}
+ constructor(){this.lastPulse={};this.reset();}
+ reset(){this.tracks={};this.lastFrame=null;}
+ get previous(){return Object.values(this.tracks)[0]?.previous||null;}
  feed(sample,now,enabled=true){
-  const inputs=[];
-  for(const finger of ['index','ring']){
-   const tip=sample?.fingers?.[finger],valid=enabled&&!!tip;
-   const input=this.tracks[finger].feed(valid?{point:tip,palm:sample.palm,span:sample.span,confidence:sample.confidence}:null,now,valid);
-   if(input)inputs.push({...input,finger});
+  if(!enabled||!sample||!Number.isFinite(now)||!Number.isFinite(sample.confidence)||sample.confidence<.75||!sample.palm||![sample.palm.x,sample.palm.y,sample.span].every(Number.isFinite)){this.reset();return [];}
+  const old=this.lastFrame;if(old&&now<=old.t)return [];
+  const ratio=old?sample.span/old.span:1;
+  if(old&&(now-old.t>1200||distance(sample.palm,old.palm)>.25||ratio<.6||ratio>1.6))this.reset();
+  this.lastFrame={t:now,palm:{...sample.palm},span:sample.span};
+  const candidates=[];
+  for(const finger of Object.keys(FINGER_TIPS)){
+   const raw=sample.fingers?.[finger];
+   if(!raw||![raw.x,raw.y].every(Number.isFinite)||raw.x<0||raw.x>1||raw.y<0||raw.y>1||!raw.local||!Object.values(raw.local).every(Number.isFinite)){delete this.tracks[finger];continue;}
+   const p={x:raw.x,y:raw.y,z:Number.isFinite(raw.z)?raw.z:0,local:{...raw.local}},track=this.tracks[finger],previous=track?.previous;
+   const dt=previous?(now-previous.t)/1000:0,travel=previous?tipDistance(p,previous):0;
+   if(!previous||travel>Math.min(.35,Math.max(.18,dt*.75))){
+    this.tracks[finger]={previous:{...p,t:now},point:{x:p.x,y:p.y,z:p.z},local:{...p.local},anchor:{...p.local},anchorTime:now};continue;
+   }
+   const ease=1-Math.exp(-dt/.045);
+   for(const axis of ['x','y','z'])track.point[axis]+=(p[axis]-track.point[axis])*ease;
+   track.previous={...p,t:now};
+   for(const axis of ['x','y','z'])track.local[axis]+=(p.local[axis]-track.local[axis])*ease;
+   const net=localDistance(track.local,track.anchor),localTravel=localDistance(p.local,previous.local);
+   if(net>=.035&&localTravel>=Math.max(.0008,dt*.02)&&travel>=Math.max(.00015,dt*.004))candidates.push({...track.point,finger,motion:true,strength:Math.min(.95,.65+net*.3+localTravel/Math.max(.04,dt)*.015),net});
+   else if(now-track.anchorTime>650){track.anchor={...track.local};track.anchorTime=now;}
   }
-  return inputs;
+  const chosen=candidates.filter(p=>now-(this.lastPulse[p.finger]??-Infinity)>=FINGER_RIPPLE_INTERVAL).sort((a,b)=>b.net-a.net).slice(0,5);
+  for(const input of chosen){this.lastPulse[input.finger]=now;const track=this.tracks[input.finger];track.anchor={...track.local};track.anchorTime=now;}
+  return chosen.map(({net,...input})=>input);
  }
 }
