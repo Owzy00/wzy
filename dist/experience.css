@@ -14,3 +14,5 @@ body{--statue-reveal:0;--stage-presence:0;--stage-sky-opacity:1;--stage-scale:1}
 body.morphing :is(.navigation,.info-panel,.view-toolbar,.zoom-controls,.map-heading,.map-crosshair,.coordinate-readout,.explore-hint,.bottom-panel,.experience-actions,.top-actions,.project-title){opacity:calc(1 - var(--stage-presence));transition:none}
 body.morphing .vignette{opacity:calc(1 - var(--stage-presence))}.stage-title{opacity:var(--statue-reveal)}.stage-bottom{opacity:max(.25,var(--stage-presence))}.stage-title>p{text-shadow:0 0 30px #d6c89c12}
 @media(prefers-reduced-motion:reduce){#sky{transform:none}.stage-title>p{text-shadow:none}}
+
+#stage-input-hint{color:#d8c58e;font-size:9px;white-space:nowrap;margin-left:auto;margin-right:10px}#stage-input-hint:empty{display:none}@media(max-width:850px){#stage-input-hint{font-size:8px;width:auto;margin:0 10px 0 0}}

@@ -1,4 +1,4 @@
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=15';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=16';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -142,22 +142,30 @@ export class StatueStage{
  prepare(item){
   if(this.prepared.has(item.id))return this.prepared.get(item.id);
   const points=decodeCloud(item),packed=createParticleBuffer(points);
-  const entry={points,packed};this.prepared.set(item.id,entry);
+  const bounds={minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity};for(const p of points){bounds.minX=Math.min(bounds.minX,p.x);bounds.maxX=Math.max(bounds.maxX,p.x);bounds.minY=Math.min(bounds.minY,p.y);bounds.maxY=Math.max(bounds.maxY,p.y);}
+  const entry={points,packed,bounds};this.prepared.set(item.id,entry);
   if(this.prepared.size>2)this.prepared.delete(this.prepared.keys().next().value);
   return entry;
  }
  start(item,now,sources=[]){
   if(this.busy||now<this.timeline.cooldownUntil)return false;
-  this.initRenderer();this.item=item;const prepared=this.prepare(item);this.points=prepared.points;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
+  this.initRenderer();this.item=item;const prepared=this.prepare(item);this.points=prepared.points;this.bounds=prepared.bounds;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.handRippleCount=0;this.pointerRippleCount=0;this.lastRippleSource='';this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
   const packed=prepared.packed;this.particleCount=packed.count;
   if(this.gl){this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.buffer);this.gl.bufferData(this.gl.ARRAY_BUFFER,packed.data,this.gl.STATIC_DRAW);}else this.prepareFallback();
   // Decode/upload before starting the clock so the first frame never skips ahead.
-  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect','star-flight-cloud');this.canvas.setAttribute('data-source-count',String(this.sources.length));return true;
+  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect','star-flight-cloud');this.canvas.setAttribute('data-source-count',String(this.sources.length));this.canvas.setAttribute('data-hand-ripples','0');this.canvas.setAttribute('data-last-ripple-source','');return true;
  }
  finish(now){this.timeline.finish(now);}
- interact(x,y,now,strength=0){
+ handPoint(x,y){
+  const l=this.currentLayout;if(!l)return {x:clamp01(x),y:clamp01(y)};
+  const b=this.bounds||{minX:-.32,maxX:.32,minY:-.48,maxY:.48};
+  const u=.10+.80*clamp01((x-.15)/.70),v=.10+.80*clamp01((y-.15)/.70);
+  return {x:clamp01((l.cx+(b.minX+(b.maxX-b.minX)*u)*l.size+this.pointer.x*46)/l.width),y:clamp01((l.cy+(b.minY+(b.maxY-b.minY)*v)*l.size+this.pointer.y*16)/l.height)};
+ }
+ interact(x,y,now,strength=0,source='pointer'){
   this.pointerTarget={x:(clamp01(x)-.5)*2,y:(clamp01(y)-.5)*2};
-  if(['GATHERING','HOLDING'].includes(this.timeline.state)&&strength>.18&&now-this.lastRipple>260){this.lastRipple=now;this.ripples.push({x:clamp01(x),y:clamp01(y),time:now,strength:Math.min(1.4,strength)});this.ripples=this.ripples.slice(-3);}
+  if(['GATHERING','HOLDING'].includes(this.timeline.state)&&strength>.18&&now-this.lastRipple>260){const p=source==='hand'?this.handPoint(x,y):{x:clamp01(x),y:clamp01(y)};this.lastRipple=now;this.lastRippleSource=source;if(source==='hand')this.handRippleCount=(this.handRippleCount||0)+1;else this.pointerRippleCount=(this.pointerRippleCount||0)+1;this.ripples.push({...p,time:now,strength:Math.min(1.4,strength)});this.ripples=this.ripples.slice(-3);this.canvas?.setAttribute?.('data-last-ripple-source',source);this.canvas?.setAttribute?.('data-hand-ripples',String(this.handRippleCount||0));return true;}
+  return false;
  }
 
  prepareFallback(){
@@ -202,7 +210,7 @@ export class StatueStage{
   const sample=this.timeline.sample(now);
   sample.presence=cloudPresence(sample.formation||0)*(1-(sample.release||0));if(sample.done){this.ripples=[];if(this.canvas){this.canvas.setAttribute?.('data-active-ripples','0');this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
   const phase=sample.release>0?'release':sample.formation<.08?'emerging':sample.formation<.3?'cloud':sample.formation<.9?'silhouette':'formed';if(this.phase!==phase){this.phase=phase;this.canvas.setAttribute?.('data-phase',phase);this.canvas.setAttribute?.('data-phase-time',String(Math.round((now-this.animationStarted)/10)/100));}const l=this.layout(width,height);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
-  const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
+  this.currentLayout=l;const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
   this.opacity=sample.presence;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
   this.ripples=this.ripples.filter(r=>now-r.time<2500);this.canvas.setAttribute?.('data-active-ripples',String(this.ripples.length));
   if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);gl.uniform1f(u.uSourceCount,this.sources.length||1);for(let i=0;i<5;i++){const source=this.sources[i]||this.sources[0]||{x:this.origin.x/width,y:this.origin.y/height};gl.uniform2f(u['uSource'+i],source.x,source.y);}for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}

@@ -82,3 +82,25 @@ export class HandNavigator{
   return {dx:this.velocity.x*dt*1.65,dy:this.velocity.y*dt*1.4};
  }
 }
+
+// Particle input uses measured displacement, rather than a fast-frame velocity gate.
+// Small, consistent motion can emit at low camera rates; jitter/reacquisition cannot.
+export class HandParticleInput{
+ constructor(){this.reset();}
+ reset(){this.previous=null;this.point=null;this.anchor=null;this.lastPulse=-Infinity;}
+ feed(sample,now,enabled=true){
+  const p=sample?.palm;
+  if(!enabled||!p||!Number.isFinite(now)||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1||sample.confidence<.75){this.reset();return null;}
+  const old=this.previous;if(old&&now<=old.t)return null;
+  const dt=old?(now-old.t)/1000:0,travel=old?distance(p,old):0,ratio=sample.span&&old?.span?sample.span/old.span:1;
+  this.previous={x:p.x,y:p.y,t:now,span:sample.span};
+  if(!old||dt>1.2||travel>Math.min(.42,Math.max(.18,dt*.9))||ratio<.6||ratio>1.6){
+   this.point={x:p.x,y:p.y};this.anchor={...this.point,t:now};return {...this.point,strength:0};
+  }
+  const ease=1-Math.exp(-dt/.06);this.point.x+=(p.x-this.point.x)*ease;this.point.y+=(p.y-this.point.y)*ease;
+  const net=distance(this.point,this.anchor);let strength=0;
+  if(net>=.008&&now-this.lastPulse>=280){strength=Math.min(1.4,.7+travel/Math.max(.04,dt)*1.5+net*1.8);this.lastPulse=now;this.anchor={...this.point,t:now};}
+  else if(now-this.anchor.t>700)this.anchor={...this.point,t:now};
+  return {...this.point,strength};
+ }
+}

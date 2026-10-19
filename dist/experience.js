@@ -1,15 +1,15 @@
-import {GestureMachine,HandNavigator} from './gesture-core.js?v=15';
-import {GestureCamera} from './gesture-camera.js?v=15';
-import {cloudPresence} from './cloud-field.js?v=15';
-import {WindField,StatueStage} from './particle-effects.js?v=15';
+import {GestureMachine,HandNavigator,HandParticleInput} from './gesture-core.js?v=16';
+import {GestureCamera} from './gesture-camera.js?v=16';
+import {cloudPresence} from './cloud-field.js?v=16';
+import {WindField,StatueStage} from './particle-effects.js?v=16';
 export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new GestureCamera(video,callbacks),stageFactory=()=>new StatueStage()}={}){
- const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator();
+ const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator(),handParticles=new HandParticleInput();
  let pack=null,packError=null,restoring=null,lastPhase='',windDrag=null,lastManualWind=-9999,lastSample=0,modelState='off',sampleCount=0,preparing=false,warmTask=null,lastCandidate=null,lastHud='',lastCountdown=-1,lastHandCount=0,resumeAfterPageShow=false,lastHand=null,lastPointer=null;
  const states={IDLE:'伸出单手，移手环顾',NAVIGATING:'移手环顾 · 握拳点亮',FIST_ARMING:'握拳锁定…',FIST_READY:'已点亮 · 张掌化形',OPENING:'张掌化形…',COOLDOWN:'移手继续探索',LOST:'请将一只手放入画面',BLOCKED:'彩塑展示中 · 即将自动返回'};
  document.body.insertAdjacentHTML('beforeend',`<div class="experience-actions"><button id="gesture-toggle" aria-expanded="false">◌ 手势交互</button><button id="morph-trigger">✧ 粒子化形</button></div>
  <section class="gesture-panel" id="gesture-panel" hidden aria-label="手势控制"><div class="gesture-panel-head"><strong>以手，环顾星空</strong><button id="gesture-close" aria-label="收起手势面板">×</button></div><p>移手带动星空，将星宿移近中央准星。握拳点亮，再张掌化形；成形约 4 秒后自动返回。生成与展示时移手或移动鼠标，粒子泛起扩散涟漪，随后平滑归位。</p><video id="hand-video" autoplay muted playsinline aria-label="本机镜像摄像头预览"></video><canvas id="hand-overlay" aria-hidden="true"></canvas><div class="gesture-meter"><span id="gesture-pose">正在接入摄像头</span><progress id="gesture-progress" max="1" value="0" aria-label="握拳张掌进度"></progress></div><p id="camera-status" role="status" aria-live="polite">首次进入时请允许摄像头。视频仅在本机处理，不上传、不录制。</p><div class="gesture-buttons"><button id="camera-start">开启摄像头</button><button id="camera-stop" disabled>关闭摄像头</button></div><button id="manual-wind">↝ 推动星尘 <kbd>W</kbd></button><p class="camera-note">收起面板仍可交互。双手入镜或丢手会重置手势。备选：鼠标拖动环顾，M 化形，Esc 返回。</p></section>
  <div id="gesture-hud" class="gesture-hud" hidden><span class="live-dot"></span><span id="gesture-hint" role="status" aria-live="polite">正在接入摄像头…</span><progress id="gesture-hud-progress" max="1" value="0" aria-label="手势操作进度"></progress></div>
- <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><div class="stage-title"><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture</span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
+ <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><div class="stage-title"><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture</span><span id="stage-input-hint" aria-live="polite"></span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
  function warmSelected(){
   if(warmTask!==null){if(globalThis.cancelIdleCallback)cancelIdleCallback(warmTask);else clearTimeout(warmTask);}
   const item=pack?.items.find(p=>p.id===adapter.selected().id);if(!item)return;
@@ -20,7 +20,7 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
  function status(state,text){
   modelState=state;ui('camera-status').textContent=text;ui('camera-start').disabled=state==='loading'||state==='running';ui('camera-stop').disabled=state==='off'||state==='error';ui('camera-start').textContent=state==='loading'?'正在准备…':'开启摄像头';document.body.classList.toggle('camera-running',state==='running');ui('gesture-hud').hidden=state==='off';
   ui('gesture-toggle').textContent=state==='running'?'◉ 手势已开启':state==='loading'?'◌ 正在接入…':'◌ 手势交互';
-  if(state!=='running'){navigator.reset();ui('gesture-pose').textContent=state==='loading'?'正在接入摄像头…':'摄像头未开启';hud(state==='loading'?(text.includes('请允许摄像头')?'首次进入，请允许摄像头':text):state==='error'?'摄像头未就绪 · 点击手势交互重试':'手势已关闭');}
+  if(state!=='running'){navigator.reset();handParticles.reset();lastHand=null;ui('gesture-pose').textContent=state==='loading'?'正在接入摄像头…':'摄像头未开启';hud(state==='loading'?(text.includes('请允许摄像头')?'首次进入，请允许摄像头':text):state==='error'?'摄像头未就绪 · 点击手势交互重试':'手势已关闭');}
   if(state==='error')panel(true);
  }
  function hud(text){if(text!==lastHud){lastHud=text;ui('gesture-hint').textContent=text;}ui('gesture-progress').value=machine.progress;ui('gesture-hud-progress').value=machine.progress;}
@@ -29,7 +29,8 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
   lastSample=timestamp;sampleCount++;lastHandCount=handCount;if(handCount>1)sample=null;
   let handSpeed=0;if(sample&&lastHand){const dt=(timestamp-lastHand.t)/1000,travel=Math.hypot(sample.palm.x-lastHand.x,sample.palm.y-lastHand.y);if(dt>0&&dt<.4&&travel<.18)handSpeed=travel/dt;}
   lastHand=sample?{...sample.palm,t:timestamp}:null;
-  if(stage.busy&&sample)stage.interact?.(sample.palm.x,sample.palm.y,timestamp,handSpeed*1.7);
+  const particleInput=handParticles.feed(sample,timestamp,camera.running&&['GATHERING','HOLDING'].includes(stage.timeline.state)&&!preparing&&!adapter.blocked()&&!document.hidden);
+  if(particleInput)stage.interact?.(particleInput.x,particleInput.y,timestamp,particleInput.strength,'hand');
   const previous=machine.state,event=machine.update(sample,timestamp,{selected:adapter.selected().id,busy:stage.busy||preparing||adapter.blocked()||document.hidden,enabled:camera.running});
   if(sample?.pose==='fist'&&previous!=='FIST_ARMING'&&previous!=='FIST_READY')adapter.stopNavigation();
   if(event?.type==='select'){
@@ -49,7 +50,7 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
  function manualWind(dx=1,dy=-.12,x=.5,y=.5){const now=performance.now();if(stage.busy||now-lastManualWind<700)return;lastManualWind=now;wind.push({x,y,dx,dy},now);adapter.notice('星尘随风 · 天球坐标保持固定');}
  async function morph(){
   if(stage.busy||preparing)return;
-  preparing=true;navigator.reset();adapter.stopNavigation();
+  preparing=true;navigator.reset();handParticles.reset();adapter.stopNavigation();
   if(!pack){adapter.notice('正在准备彩塑点云…');await loadPack;}
   if(!pack){preparing=false;machine.reset(performance.now());adapter.notice(packError?.message||'素材载入失败，请刷新重试');return;}
   const selected=adapter.selected(),item=pack.items.find(p=>p.id===selected.id&&p.name===selected.name);
@@ -76,18 +77,18 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
   get navigating(){return camera.running&&machine.state==='NAVIGATING'&&!stage.busy;},
   get occludesSky(){return stage.occludesSky;},
   beforeFrame(now){
-   camera.suspended=stage.timeline.state==='RETURNING'||preparing||adapter.blocked()||document.hidden;wind.prepare(now);
+   camera.suspended=stage.timeline.state==='RETURNING'||preparing||adapter.blocked()||document.hidden;wind.prepare(now);if(camera.suspended)handParticles.reset();
    if(camera.suspended||stage.busy){navigator.reset();machine.reset(now,'BLOCKED');return;}
    if(camera.running&&now-lastSample>Math.max(650,camera.inferenceMs*3)){machine.reset(now,'LOST');navigator.reset();hud(states.LOST);}
    const motion=navigator.step(now);if(motion.dx||motion.dy)adapter.pan(motion.dx,motion.dy);
    if(camera.running){lastCandidate=adapter.nearest();refreshHud();}
   },
   offset(x,y,w,h){return wind.offset(x,y,w,h);},
-  draw(context,now,w,h,anchor,reduced){const sample=stage.draw(context,now,w,h,anchor,reduced),presence=sample.presence??cloudPresence(sample.amount||0);document.body.style.setProperty('--stage-presence',String(presence));document.body.style.setProperty('--statue-reveal',String(Math.max(0,Math.min(1,((sample.formation||0)-.5)/.4))*(1-(sample.release||0))));document.body.style.setProperty('--stage-sky-opacity',String(1-presence*.48));document.body.style.setProperty('--stage-scale',String(1));if(context&&!reduced&&!stage.busy)wind.draw(context,w,h);if(stage.busy&&sample.state!==lastPhase){lastPhase=sample.state;ui('stage-phase').textContent={GATHERING:'流尘凝像',HOLDING:'星神呼吸',RETURNING:'流光归野'}[sample.state]||'';}if(stage.busy){const remaining=sample.hold?Math.ceil((stage.timeline.started+stage.timeline.duration.gather+stage.timeline.duration.hold-now)/1000):-1;if(remaining!==lastCountdown||sample.state!=='HOLDING'){lastCountdown=remaining;ui('stage-countdown').textContent=sample.hold?remaining+' 秒后回到星空':sample.state==='RETURNING'?'流光散回星空':'成形后自动返回星空';}}if(sample.done){document.body.classList.remove('morphing');document.querySelector('main').inert=false;document.querySelector('.bottom-panel').inert=false;ui('statue-stage-ui').hidden=true;ui('morph-trigger').disabled=false;ui('morph-trigger').focus({preventScroll:true});adapter.restore(restoring);navigator.reset();machine.reset(now);machine.cooldownUntil=now+700;restoring=null;lastPhase='';hud('已回到星空 · 移手继续探索');adapter.notice('已回到星空 · 移手继续探索');}},
+  draw(context,now,w,h,anchor,reduced){const sample=stage.draw(context,now,w,h,anchor,reduced),presence=sample.presence??cloudPresence(sample.amount||0);document.body.style.setProperty('--stage-presence',String(presence));document.body.style.setProperty('--statue-reveal',String(Math.max(0,Math.min(1,((sample.formation||0)-.5)/.4))*(1-(sample.release||0))));document.body.style.setProperty('--stage-sky-opacity',String(1-presence*.48));document.body.style.setProperty('--stage-scale',String(1));if(context&&!reduced&&!stage.busy)wind.draw(context,w,h);if(stage.busy&&sample.state!==lastPhase){lastPhase=sample.state;ui('stage-phase').textContent={GATHERING:'流尘凝像',HOLDING:'星神呼吸',RETURNING:'流光归野'}[sample.state]||'';}if(stage.busy){ui('stage-input-hint').textContent=sample.state==='RETURNING'?'':!camera.running?(modelState==='error'?'摄像头未就绪 · 可用鼠标':modelState==='loading'?'正在接入摄像头…':'手势未开启 · 可用鼠标'):lastHandCount>1?'请只保留一只手':!handParticles.previous||now-lastSample>1200?'请将单手放入画面':stage.lastRippleSource==='hand'&&now-stage.lastRipple<700?'涟漪已响应':'移手泛起涟漪';const remaining=sample.hold?Math.ceil((stage.timeline.started+stage.timeline.duration.gather+stage.timeline.duration.hold-now)/1000):-1;if(remaining!==lastCountdown||sample.state!=='HOLDING'){lastCountdown=remaining;ui('stage-countdown').textContent=sample.hold?remaining+' 秒后回到星空':sample.state==='RETURNING'?'流光散回星空':'成形后自动返回星空';}}if(sample.done){document.body.classList.remove('morphing');document.querySelector('main').inert=false;document.querySelector('.bottom-panel').inert=false;ui('statue-stage-ui').hidden=true;ui('morph-trigger').disabled=false;ui('morph-trigger').focus({preventScroll:true});adapter.restore(restoring);navigator.reset();machine.reset(now);machine.cooldownUntil=now+700;restoring=null;lastPhase='';hud('已回到星空 · 移手继续探索');adapter.notice('已回到星空 · 移手继续探索');}},
   pointerCancel(){windDrag=null;},
   pointerDown(event){if(stage.busy)return true;if(event.shiftKey){windDrag={x:event.clientX,y:event.clientY,t:performance.now(),lastX:event.clientX,lastY:event.clientY};event.currentTarget.setPointerCapture(event.pointerId);return true;}return false;},
   pointerMove(event){if(stage.busy)return true;if(!windDrag)return false;windDrag.lastX=event.clientX;windDrag.lastY=event.clientY;return true;},
   pointerUp(event){if(stage.busy)return true;if(!windDrag)return false;const d=windDrag;windDrag=null;const seconds=Math.max(.12,(performance.now()-d.t)/1000);manualWind((event.clientX-d.x)/innerWidth/seconds*2,(event.clientY-d.y)/innerHeight/seconds*2,event.clientX/innerWidth,event.clientY/innerHeight);return true;},
-  get diagnostics(){return {gestureState:machine.state,cameraState:modelState,cameraBackend:camera.backend,cameraWorkerError:camera.workerError,inferenceMs:camera.inferenceMs,sentFrames:camera.sent,receivedFrames:camera.received,sampleCount,gestureCandidate:lastCandidate,cameraSuspended:camera.suspended,morphState:stage.timeline.state,morphPoints:stage.item?.count||0,morphFrameMs:stage.frameMs,particleQuality:stage.quality,morphRenderer:stage.renderer,morphError:stage.error||null,morphCadence:stage.cadence,assetCount:pack?.items.length||0,windGusts:wind.gusts.length};}
+  get diagnostics(){return {gestureState:machine.state,cameraState:modelState,cameraBackend:camera.backend,cameraWorkerError:camera.workerError,inferenceMs:camera.inferenceMs,sentFrames:camera.sent,receivedFrames:camera.received,sampleCount,gestureCandidate:lastCandidate,cameraSuspended:camera.suspended,handRippleCount:stage.handRippleCount||0,activeRipples:stage.ripples?.length||0,lastRippleSource:stage.lastRippleSource||null,morphState:stage.timeline.state,morphPoints:stage.item?.count||0,morphFrameMs:stage.frameMs,particleQuality:stage.quality,morphRenderer:stage.renderer,morphError:stage.error||null,morphCadence:stage.cadence,assetCount:pack?.items.length||0,windGusts:wind.gusts.length};}
  };
 }
