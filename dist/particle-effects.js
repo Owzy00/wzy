@@ -1,4 +1,4 @@
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=16';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=17';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -63,13 +63,14 @@ uniform vec2 uViewport,uPointer,uOrigin;uniform vec3 uLayout;
 uniform vec2 uSource0,uSource1,uSource2,uSource3,uSource4;uniform float uSourceCount;
 uniform float uTime,uAmount,uFormation,uRelease,uDpr,uReduced;
 uniform vec4 uRipple0,uRipple1,uRipple2;
+uniform vec3 uRippleSpread;
 varying vec3 vColor;varying float vAlpha,vSpark;
 ${CLOUD_GLSL}
-vec2 wake(vec2 p,vec4 ripple){
+vec2 wake(vec2 p,vec4 ripple,float spread){
  if(ripple.w<.001||ripple.z<=0.||ripple.z>=2.5)return vec2(0.);
  float dim=min(uViewport.x,uViewport.y),radius=ripple.z*dim*.36;
- vec2 d=p-ripple.xy*uViewport;float edge=(length(d)-radius)/(dim*.04);
- return d/max(1.,length(d))*exp(-edge*edge)*exp(-ripple.z*1.7)*ripple.w*dim*.045*smoothstep(0.,.10,ripple.z)*(1.-smoothstep(2.1,2.5,ripple.z));
+ vec2 d=p-ripple.xy*uViewport;float edge=(length(d)-radius)/(dim*.04*spread);
+ return d/max(1.,length(d))*exp(-edge*edge)*exp(-ripple.z*1.7)*ripple.w*dim*.045*(1.+(spread-1.)*.4)*smoothstep(0.,.10,ripple.z)*(1.-smoothstep(2.1,2.5,ripple.z));
 }
 void main(){
  // Explicit morphing still has a quiet, changing flow under reduced motion.
@@ -87,7 +88,7 @@ void main(){
  vec2 source=uSource0;if(sourceIndex>.5)source=uSource1;if(sourceIndex>1.5)source=uSource2;if(sourceIndex>2.5)source=uSource3;if(sourceIndex>3.5)source=uSource4;
  vec3 flight=starFlight(aSeed,uTime,source*uViewport,pos,min(uViewport.x,uViewport.y),motion);pos=flight.xy;
  float freeMotion=(1.-smoothstep(0.,.22,uRelease));
- vec2 disturbance=wake(pos,uRipple0)+wake(pos,uRipple1)+wake(pos,uRipple2);
+ vec2 disturbance=wake(pos,uRipple0,uRippleSpread.x)+wake(pos,uRipple1,uRippleSpread.y)+wake(pos,uRipple2,uRippleSpread.z);
  disturbance*=min(1.,min(uViewport.x,uViewport.y)*.07/max(.001,length(disturbance)));
  pos+=disturbance*freeMotion*motion;
  float sweep=pow(max(0.,sin(aTarget.y*14.-uTime*2.3+aTarget.x*2.5)),20.)*settle*(1.-uRelease);
@@ -128,7 +129,7 @@ export class StatueStage{
    this.gl=gl;
    const shader=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;};
    const vs=shader(gl.VERTEX_SHADER,FLOW_VERTEX),fs=shader(gl.FRAGMENT_SHADER,FLOW_FRAGMENT),program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));gl.deleteShader(vs);gl.deleteShader(fs);
-   this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2','uSource0','uSource1','uSource2','uSource3','uSource4','uSourceCount'])this.uniforms[n]=gl.getUniformLocation(program,n);
+   this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2','uRippleSpread','uSource0','uSource1','uSource2','uSource3','uSource4','uSourceCount'])this.uniforms[n]=gl.getUniformLocation(program,n);
    gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
    for(const [name,size,offset]of [['aTarget',3,0],['aColor',3,12],['aSeed',3,24],['aFlow',1,36]]){const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,40,offset);}
    gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.clearColor(0,0,0,0);this.renderer='webgl';
@@ -159,12 +160,13 @@ export class StatueStage{
  handPoint(x,y){
   const l=this.currentLayout;if(!l)return {x:clamp01(x),y:clamp01(y)};
   const b=this.bounds||{minX:-.32,maxX:.32,minY:-.48,maxY:.48};
-  const u=.10+.80*clamp01((x-.15)/.70),v=.10+.80*clamp01((y-.15)/.70);
+  const gainX=Math.min(4.5,l.width/Math.max(1,(b.maxX-b.minX)*l.size)*1.4),gainY=Math.min(2.4,l.height/Math.max(1,(b.maxY-b.minY)*l.size)*1.4);
+  const u=.10+.80*clamp01(.5+(x-.5)*gainX),v=.10+.80*clamp01(.5+(y-.5)*gainY);
   return {x:clamp01((l.cx+(b.minX+(b.maxX-b.minX)*u)*l.size+this.pointer.x*46)/l.width),y:clamp01((l.cy+(b.minY+(b.maxY-b.minY)*v)*l.size+this.pointer.y*16)/l.height)};
  }
  interact(x,y,now,strength=0,source='pointer'){
   this.pointerTarget={x:(clamp01(x)-.5)*2,y:(clamp01(y)-.5)*2};
-  if(['GATHERING','HOLDING'].includes(this.timeline.state)&&strength>.18&&now-this.lastRipple>260){const p=source==='hand'?this.handPoint(x,y):{x:clamp01(x),y:clamp01(y)};this.lastRipple=now;this.lastRippleSource=source;if(source==='hand')this.handRippleCount=(this.handRippleCount||0)+1;else this.pointerRippleCount=(this.pointerRippleCount||0)+1;this.ripples.push({...p,time:now,strength:Math.min(1.4,strength)});this.ripples=this.ripples.slice(-3);this.canvas?.setAttribute?.('data-last-ripple-source',source);this.canvas?.setAttribute?.('data-hand-ripples',String(this.handRippleCount||0));return true;}
+  if(['GATHERING','HOLDING'].includes(this.timeline.state)&&strength>.18&&now-this.lastRipple>260){const p=source==='hand'?this.handPoint(x,y):{x:clamp01(x),y:clamp01(y)};this.lastRipple=now;this.lastRippleSource=source;if(source==='hand')this.handRippleCount=(this.handRippleCount||0)+1;else this.pointerRippleCount=(this.pointerRippleCount||0)+1;this.ripples.push({...p,time:now,strength:Math.min(1.4,strength),spread:source==='hand'?1.35:1});this.ripples=this.ripples.slice(-3);this.canvas?.setAttribute?.('data-last-ripple-source',source);this.canvas?.setAttribute?.('data-hand-ripples',String(this.handRippleCount||0));return true;}
   return false;
  }
 
@@ -213,7 +215,7 @@ export class StatueStage{
   this.currentLayout=l;const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
   this.opacity=sample.presence;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
   this.ripples=this.ripples.filter(r=>now-r.time<2500);this.canvas.setAttribute?.('data-active-ripples',String(this.ripples.length));
-  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);gl.uniform1f(u.uSourceCount,this.sources.length||1);for(let i=0;i<5;i++){const source=this.sources[i]||this.sources[0]||{x:this.origin.x/width,y:this.origin.y/height};gl.uniform2f(u['uSource'+i],source.x,source.y);}for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
+  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);gl.uniform1f(u.uSourceCount,this.sources.length||1);for(let i=0;i<5;i++){const source=this.sources[i]||this.sources[0]||{x:this.origin.x/width,y:this.origin.y/height};gl.uniform2f(u['uSource'+i],source.x,source.y);}gl.uniform3f(u.uRippleSpread,this.ripples[0]?.spread||1,this.ripples[1]?.spread||1,this.ripples[2]?.spread||1);for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
   else{this.context.setTransform(dpr,0,0,dpr,0,0);this.drawFallback(l,now,sample,reduced);}
   this.frameMs=performance.now()-started;
   if(this.intervals.length){const sorted=[...this.intervals].sort((a,b)=>a-b),mean=this.intervals.reduce((a,b)=>a+b)/this.intervals.length;this.cadence={fps:Math.round(1000/mean),p95Ms:Math.round(sorted[Math.floor(sorted.length*.95)]*10)/10,samples:sorted.length};}

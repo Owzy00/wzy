@@ -26,8 +26,9 @@ export function prepareRippleWaves(ripples,now,width,height){
  const dim=Math.min(width,height),waves=[];
  for(const r of ripples.slice(-3)){
   const age=(now-r.time)/1000;if(age<=0||age>=2.5)continue;
-  waves.push({x:r.x*width,y:r.y*height,radius:age*dim*.36,edge:dim*.04,
-   force:cloudSmooth(age/.10)*Math.exp(-age*1.7)*r.strength*dim*.045*(1-cloudSmooth((age-2.1)/.4))});
+  const spread=Math.max(1,Math.min(1.35,r.spread||1));
+  waves.push({x:r.x*width,y:r.y*height,radius:age*dim*.36,edge:dim*.04*spread,
+   force:cloudSmooth(age/.10)*Math.exp(-age*1.7)*r.strength*dim*.045*(1+(spread-1)*.4)*(1-cloudSmooth((age-2.1)/.4))});
  }
  return waves;
 }

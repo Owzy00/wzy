@@ -1,11 +1,11 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>星野 · 手势涟漪链路验证</title>
-<link rel="stylesheet" href="./experience.css?v=16">
+<link rel="stylesheet" href="./experience.css?v=17">
 <style>body{margin:0;background:#0a0e14;color:#dfd2ac;font:12px system-ui}#statue-particles{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}[hidden]{display:none!important}.experience-actions,.gesture-panel,.gesture-hud{display:none!important}.controls{position:fixed;left:18px;top:12px;right:18px;z-index:20;display:flex;gap:8px;flex-wrap:wrap;align-items:center}button{padding:9px;background:#0c1118;border:1px solid #8e7949;color:#dfcf9b}h1{font:15px serif;margin:0 15px 0 0}small{width:100%;color:#8e9dac}#readout{font:12px monospace;color:#ecd498;margin-left:auto}#sky{position:fixed;inset:0;opacity:.52}</style>
 <canvas id="sky" aria-hidden="true"></canvas><main></main><div class="bottom-panel"></div><div class="controls"><h1>手势涟漪链路验证</h1><button id="gather">生成阶段</button><button id="hold">成形阶段</button><button id="slow-hand">回放缓慢移手 · 2 FPS</button><button id="jitter">回放静止抖动</button><output id="readout" role="status">准备中…</output><small>测试页使用模拟的 21 点手部数据，通过真实手势协调器与粒子渲染器回放；不申请摄像头，不代表真人识别实测。</small></div>
 <script type="module">
-import {initExperience} from './experience.js?v=16';
-import {StatueStage} from './particle-effects.js?v=16';
-import {describeHand} from './gesture-core.js?v=16';
+import {initExperience} from './experience.js?v=17';
+import {StatueStage} from './particle-effects.js?v=17';
+import {describeHand} from './gesture-core.js?v=17';
 const stage=new StatueStage();let callbacks,camera,locked=2.8,timer=null,mode='';
 const experience=initExperience({selected:()=>({id:3,name:'房'}),blocked:()=>false,notice(){},stopNavigation(){},snapshot:()=>({}),restore(){},nearest:()=>3,mansionName:()=> '房',pan(){},emissionSources:()=>[{x:.4,y:.4},{x:.45,y:.5},{x:.47,y:.6},{x:.43,y:.7}]},{stageFactory:()=>stage,cameraFactory:(video,c)=>{callbacks=c;return camera={running:false,inferenceMs:500,async start(){this.running=true;c.onStatus('running','模拟手部输入 · 不申请摄像头');},stop(){this.running=false;c.onSample(null,performance.now(),null,0);}};}});
 function sky(){const c=document.querySelector('#sky');c.width=innerWidth;c.height=innerHeight;const ctx=c.getContext('2d');ctx.fillStyle='#0b1118';ctx.fillRect(0,0,c.width,c.height);for(let i=0;i<1100;i++){ctx.fillStyle=i%13?'#afc3db66':'#f7d484';ctx.fillRect((i*.6180339%1)*c.width,(i*.7548776%1)*c.height,1.3,1.3);}}sky();addEventListener('resize',sky);

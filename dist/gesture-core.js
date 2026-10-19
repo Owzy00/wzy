@@ -99,7 +99,7 @@ export class HandParticleInput{
   }
   const ease=1-Math.exp(-dt/.06);this.point.x+=(p.x-this.point.x)*ease;this.point.y+=(p.y-this.point.y)*ease;
   const net=distance(this.point,this.anchor);let strength=0;
-  if(net>=.008&&now-this.lastPulse>=280){strength=Math.min(1.4,.7+travel/Math.max(.04,dt)*1.5+net*1.8);this.lastPulse=now;this.anchor={...this.point,t:now};}
+  if(net>=.008&&now-this.lastPulse>=280){strength=Math.min(1.4,1.10+travel/Math.max(.04,dt)*1.5+net*1.8);this.lastPulse=now;this.anchor={...this.point,t:now};}
   else if(now-this.anchor.t>700)this.anchor={...this.point,t:now};
   return {...this.point,strength};
  }
