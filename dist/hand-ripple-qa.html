@@ -1,18 +1,33 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>星野 · 手势涟漪链路验证</title>
-<link rel="stylesheet" href="./experience.css?v=18">
+<link rel="stylesheet" href="./experience.css?v=19">
 <style>body{margin:0;background:#0a0e14;color:#dfd2ac;font:12px system-ui}#statue-particles{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}[hidden]{display:none!important}.experience-actions,.gesture-panel,.gesture-hud{display:none!important}.controls{position:fixed;left:18px;top:12px;right:18px;z-index:20;display:flex;gap:8px;flex-wrap:wrap;align-items:center}button{padding:9px;background:#0c1118;border:1px solid #8e7949;color:#dfcf9b}h1{font:15px serif;margin:0 15px 0 0}small{width:100%;color:#8e9dac}#readout{font:12px monospace;color:#ecd498;margin-left:auto}#sky{position:fixed;inset:0;opacity:.52}</style>
-<canvas id="sky" aria-hidden="true"></canvas><main></main><div class="bottom-panel"></div><div class="controls"><h1>双指涟漪链路验证</h1><button id="gather">生成阶段</button><button id="hold">成形阶段</button><button id="index-tip">只移动食指</button><button id="ring-tip">只移动无名指</button><button id="both-tips">同时移动双指</button><button id="other-fingers">只移动其余手指</button><button id="jitter">回放静止抖动</button><output id="readout" role="status">准备中…</output><small>测试页使用模拟的 21 点手部数据，通过真实手势协调器与粒子渲染器回放；不申请摄像头，不代表真人识别实测。</small></div>
+<canvas id="sky" aria-hidden="true"></canvas><main></main><div class="bottom-panel"></div><div class="controls"><h1>双指轻点涟漪验证</h1><button id="gather">生成阶段</button><button id="hold">成形阶段</button><button id="index-tip">食指轻点</button><button id="ring-tip">无名指轻点</button><button id="both-tips">双指轻点</button><button id="move">普通移手</button><button id="held">按住不抬起</button><button id="freeze">涟漪定帧</button><button id="other-fingers">只移动其余手指</button><button id="jitter">回放静止抖动</button><output id="readout" role="status">准备中…</output><small>测试页使用模拟的 21 点手部数据，按记录时间戳通过真实手势协调器与粒子渲染器回放；不申请摄像头，不代表真人识别实测。</small></div>
 <script type="module">
-import {initExperience} from './experience.js?v=18';
-import {StatueStage} from './particle-effects.js?v=18';
-import {describeHand} from './gesture-core.js?v=18';
+import {initExperience} from './experience.js?v=19';
+import {StatueStage} from './particle-effects.js?v=19';
+import {describeHand} from './gesture-core.js?v=19';
 document.addEventListener('pointermove',event=>{if(event.target.closest('.controls'))event.stopPropagation();},true);
-const stage=new StatueStage();let callbacks,camera,locked=2.8,timer=null,mode='';
+const stage=new StatueStage();let callbacks,camera,locked=2.8,mode='',freeze=false;
 const experience=initExperience({selected:()=>({id:3,name:'房'}),blocked:()=>false,notice(){},stopNavigation(){},snapshot:()=>({}),restore(){},nearest:()=>3,mansionName:()=> '房',pan(){},emissionSources:()=>[{x:.4,y:.4},{x:.45,y:.5},{x:.47,y:.6},{x:.43,y:.7}]},{stageFactory:()=>stage,cameraFactory:(video,c)=>{callbacks=c;return camera={running:false,inferenceMs:500,async start(){this.running=true;c.onStatus('running','模拟手部输入 · 不申请摄像头');},stop(){this.running=false;c.onSample(null,performance.now(),null,0);}};}});
 function sky(){const c=document.querySelector('#sky');c.width=innerWidth;c.height=innerHeight;const ctx=c.getContext('2d');ctx.fillStyle='#0b1118';ctx.fillRect(0,0,c.width,c.height);for(let i=0;i<1100;i++){ctx.fillStyle=i%13?'#afc3db66':'#f7d484';ctx.fillRect((i*.6180339%1)*c.width,(i*.7548776%1)*c.height,1.3,1.3);}}sky();addEventListener('resize',sky);
-async function begin(seconds){clearInterval(timer);stage.timeline.state='IDLE';stage.timeline.cooldownUntil=0;callbacks.onSample(null,performance.now(),null,0);await document.querySelector('#morph-trigger').onclick();locked=seconds;mode='';stage.timeline.started=stage.animationStarted=performance.now()-seconds*1000;}
+async function begin(seconds){stage.timeline.state='IDLE';stage.timeline.cooldownUntil=0;callbacks.onSample(null,performance.now(),null,0);await document.querySelector('#morph-trigger').onclick();locked=seconds;mode='';freeze=false;document.querySelector('#freeze').textContent='涟漪定帧';stage.timeline.started=stage.animationStarted=performance.now()-seconds*1000;}
 function landmarks(){const p=Array.from({length:21},()=>({x:.5,y:.7,z:0}));p[0]={x:.5,y:.86};for(const [i,mcp]of [5,9,13,17].entries()){const x=.44+i*.05;p[mcp]={x,y:.68};p[mcp+1]={x,y:.58};p[mcp+2]={x,y:.48};p[mcp+3]={x,y:.38};}return p;}
-function replay(kind){clearInterval(timer);callbacks.onSample(null,performance.now(),null,0);mode=kind;let i=0;const emit=()=>{const p=landmarks(),ids=kind==='index'?[8]:kind==='ring'?[16]:kind==='other'?[4,12,20]:[8,16];for(const id of ids){p[id].x+=kind==='jitter'?Math.sin(i)*.001:i*.01;p[id].y+=kind==='jitter'?Math.cos(i)*.001:i*.004;}callbacks.onSample(describeHand(p,.96,1),performance.now(),null,1);if(++i>=7){clearInterval(timer);mode=kind+'-complete';}};emit();timer=setInterval(emit,500);}
-document.querySelector('#gather').onclick=()=>begin(2.8);document.querySelector('#hold').onclick=()=>begin(5.4);for(const [id,kind]of [['index-tip','index'],['ring-tip','ring'],['both-tips','both'],['other-fingers','other'],['jitter','jitter']])document.querySelector('#'+id).onclick=()=>replay(kind);
-function draw(now){if(stage.busy){stage.timeline.started=stage.animationStarted=now-locked*1000;}experience.beforeFrame(now);experience.draw(null,now,innerWidth,innerHeight,{x:innerWidth*.5,y:innerHeight*.5},false);const r=document.querySelector('#readout');r.textContent=`${stage.timeline.state} · 食指 ${stage.fingerRippleCount?.index||0} · 无名指 ${stage.fingerRippleCount?.ring||0} · ${stage.renderer}`;r.dataset.phase=stage.timeline.state;r.dataset.indexRipples=String(stage.fingerRippleCount?.index||0);r.dataset.ringRipples=String(stage.fingerRippleCount?.ring||0);r.dataset.handRipples=String(stage.handRippleCount||0);r.dataset.replay=mode;requestAnimationFrame(draw);}begin(2.8);requestAnimationFrame(draw);
+function replay(kind){
+ const frames=kind==='index'||kind==='ring'||kind==='both'?[[0,0],[60,0],[120,0],[180,.06],[240,.14],[300,.16],[360,.06],[420,0]]:Array.from({length:21},(_,i)=>[i*60,i]);
+ const base=performance.now()-frames.at(-1)[0];callbacks.onSample(null,base-1,null,0);
+ for(const [t,press]of frames){const p=landmarks();
+  if(['index','both'].includes(kind))p[8].y+=press;
+  if(['ring','both'].includes(kind))p[16].y+=press;
+  if(kind==='move')for(const q of p){q.x+=press*.004;q.y+=press*.002;}
+  if(kind==='held'&&press>=4){p[8].y+=.16;p[16].y+=.16;}
+  if(kind==='jitter'){p[8].y+=Math.sin(press)*.001;p[16].y+=Math.cos(press)*.001;}
+  if(kind==='other')for(const id of [4,12,20])p[id].y+=Math.sin(press)*.14;
+  callbacks.onSample(describeHand(p,.96,1),base+t,null,1);
+ }
+ mode=kind+'-complete';
+}
+document.querySelector('#gather').onclick=()=>begin(2.8);document.querySelector('#hold').onclick=()=>begin(5.4);
+for(const [id,kind]of [['index-tip','index'],['ring-tip','ring'],['both-tips','both'],['move','move'],['held','held'],['other-fingers','other'],['jitter','jitter']])document.querySelector('#'+id).onclick=()=>replay(kind);
+document.querySelector('#freeze').onclick=()=>{freeze=!freeze;document.querySelector('#freeze').textContent=freeze?'恢复动效':'涟漪定帧';};
+function draw(now){if(freeze)for(const r of stage.ripples)r.time=now-350;if(stage.busy){stage.timeline.started=stage.animationStarted=now-locked*1000;}experience.beforeFrame(now);experience.draw(null,now,innerWidth,innerHeight,{x:innerWidth*.5,y:innerHeight*.5},false);const r=document.querySelector('#readout');r.textContent=`${stage.timeline.state} · 食指 ${stage.fingerRippleCount?.index||0} · 无名指 ${stage.fingerRippleCount?.ring||0} · ${stage.renderer}`;r.dataset.phase=stage.timeline.state;r.dataset.indexRipples=String(stage.fingerRippleCount?.index||0);r.dataset.ringRipples=String(stage.fingerRippleCount?.ring||0);r.dataset.handRipples=String(stage.handRippleCount||0);r.dataset.replay=mode;requestAnimationFrame(draw);}begin(2.8);requestAnimationFrame(draw);
 </script></html>

@@ -26,9 +26,10 @@ export function prepareRippleWaves(ripples,now,width,height){
  const dim=Math.min(width,height),waves=[];
  for(const r of ripples.slice(-3)){
   const age=(now-r.time)/1000;if(age<=0||age>=2.5)continue;
-  const spread=Math.max(1,Math.min(1.35,r.spread||1));
-  waves.push({x:r.x*width,y:r.y*height,radius:age*dim*.36,edge:dim*.04*spread,
-   force:cloudSmooth(age/.10)*Math.exp(-age*1.7)*r.strength*dim*.045*(1+(spread-1)*.4)*(1-cloudSmooth((age-2.1)/.4))});
+  const spread=Math.max(.45,Math.min(1,r.spread||1)),tap=spread<1,life=tap?1.35:2.5;
+  if(age>=life)continue;
+  waves.push({x:r.x*width,y:r.y*height,radius:age*dim*(tap?.18:.36),edge:dim*.04*spread,
+   force:cloudSmooth(age/.10)*Math.exp(-age*(tap?2.3:1.7))*r.strength*dim*.045*(tap?.72:1)*(1-cloudSmooth((age-(tap?1:2.1))/(tap?.35:.4)))});
  }
  return waves;
 }
@@ -38,7 +39,7 @@ export function rippleDisplacement(x,y,waves,limit,out={}){
  const scale=Math.min(1,limit/Math.max(.001,Math.hypot(dx,dy)));out.x=dx*scale;out.y=dy*scale;return out;
 }
 export function rippleActivity(ripples,now){
- let activity=0;for(const r of ripples){const age=(now-r.time)/1000;if(age>0&&age<2.5)activity=Math.max(activity,cloudSmooth(age/.10)*Math.exp(-age*.8)*Math.min(1,r.strength)*(1-cloudSmooth((age-2.1)/.4)));}return activity;
+ let activity=0;for(const r of ripples){const age=(now-r.time)/1000,tap=r.spread<1;if(age>0&&age<(tap?1.35:2.5))activity=Math.max(activity,cloudSmooth(age/.10)*Math.exp(-age*.8)*Math.min(1,r.strength)*(1-cloudSmooth((age-(tap?1:2.1))/(tap?.35:.4))));}return activity;
 }
 export function cloudField(seed,time,motion=1,out={}){
  const t=time*.75*motion,u=(seed.x-.5)*2.6,v=(seed.y-.5)*1.7;

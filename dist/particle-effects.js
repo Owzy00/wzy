@@ -1,4 +1,4 @@
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=18';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=19';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -67,10 +67,11 @@ uniform vec3 uRippleSpread;
 varying vec3 vColor;varying float vAlpha,vSpark;
 ${CLOUD_GLSL}
 vec2 wake(vec2 p,vec4 ripple,float spread){
- if(ripple.w<.001||ripple.z<=0.||ripple.z>=2.5)return vec2(0.);
- float dim=min(uViewport.x,uViewport.y),radius=ripple.z*dim*.36;
+ float tap=spread<1.?1.:0.,life=mix(2.5,1.35,tap);
+ if(ripple.w<.001||ripple.z<=0.||ripple.z>=life)return vec2(0.);
+ float dim=min(uViewport.x,uViewport.y),radius=ripple.z*dim*mix(.36,.18,tap);
  vec2 d=p-ripple.xy*uViewport;float edge=(length(d)-radius)/(dim*.04*spread);
- return d/max(1.,length(d))*exp(-edge*edge)*exp(-ripple.z*1.7)*ripple.w*dim*.045*(1.+(spread-1.)*.4)*smoothstep(0.,.10,ripple.z)*(1.-smoothstep(2.1,2.5,ripple.z));
+ return d/max(1.,length(d))*exp(-edge*edge)*exp(-ripple.z*mix(1.7,2.3,tap))*ripple.w*dim*.045*mix(1.,.72,tap)*smoothstep(0.,.10,ripple.z)*(1.-smoothstep(mix(2.1,1.,tap),life,ripple.z));
 }
 void main(){
  // Explicit morphing still has a quiet, changing flow under reduced motion.
@@ -171,7 +172,7 @@ export class StatueStage{
  interactFingers(inputs,now,palm){
   // Retain smooth whole-model parallax, without letting the palm emit a wave.
   if(palm&&Number.isFinite(palm.x)&&Number.isFinite(palm.y))this.pointerTarget={x:(clamp01(palm.x)-.5)*2,y:(clamp01(palm.y)-.5)*2};
-  let count=0;for(const input of inputs){if(!['index','ring'].includes(input.finger))continue;if(this.emitRipple(input.x,input.y,now,input.strength,'hand',input.finger))count++;}
+  let count=0;for(const input of inputs){if(!['index','ring'].includes(input.finger)||input.tap!==true)continue;if(this.emitRipple(input.x,input.y,now,input.strength,'hand',input.finger))count++;}
   return count;
  }
  emitRipple(x,y,now,strength,source,finger=null){
@@ -180,7 +181,7 @@ export class StatueStage{
   if(![x,y,now,strength].every(Number.isFinite)||!['GATHERING','HOLDING'].includes(this.timeline.state)||strength<=.18||now-last<=260)return false;
   const p=hand?this.handPoint(x,y):{x:clamp01(x),y:clamp01(y)};this.lastRipple=now;this.lastRippleSource=source;this.lastRippleFinger=finger;
   if(hand){this.fingerCooldowns??={};this.fingerCooldowns[finger]=now;this.fingerRippleCount??={index:0,ring:0};this.fingerRippleCount[finger]++;this.handRippleCount=(this.handRippleCount||0)+1;}else{this.lastPointerRipple=now;this.pointerRippleCount=(this.pointerRippleCount||0)+1;}
-  this.ripples.push({...p,time:now,strength:Math.min(1.4,strength),spread:hand?1.35:1,...(hand?{finger}:{} )});this.ripples=this.ripples.slice(-3);
+  this.ripples.push({...p,time:now,strength:Math.min(1.4,strength),spread:hand?.55:1,...(hand?{finger}:{} )});this.ripples=this.ripples.slice(-3);
   for(const [key,value]of Object.entries({'last-ripple-source':source,'last-ripple-finger':finger||'','hand-ripples':this.handRippleCount||0,'index-ripples':this.fingerRippleCount?.index||0,'ring-ripples':this.fingerRippleCount?.ring||0}))this.canvas?.setAttribute?.('data-'+key,String(value));
   return true;
  }
@@ -229,7 +230,7 @@ export class StatueStage{
   const phase=sample.release>0?'release':sample.formation<.08?'emerging':sample.formation<.3?'cloud':sample.formation<.9?'silhouette':'formed';if(this.phase!==phase){this.phase=phase;this.canvas.setAttribute?.('data-phase',phase);this.canvas.setAttribute?.('data-phase-time',String(Math.round((now-this.animationStarted)/10)/100));}const l=this.layout(width,height);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
   this.currentLayout=l;const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
   this.opacity=sample.presence;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
-  this.ripples=this.ripples.filter(r=>now-r.time<2500);this.canvas.setAttribute?.('data-active-ripples',String(this.ripples.length));
+  this.ripples=this.ripples.filter(r=>now-r.time<(r.spread<1?1350:2500));this.canvas.setAttribute?.('data-active-ripples',String(this.ripples.length));
   if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);gl.uniform1f(u.uSourceCount,this.sources.length||1);for(let i=0;i<5;i++){const source=this.sources[i]||this.sources[0]||{x:this.origin.x/width,y:this.origin.y/height};gl.uniform2f(u['uSource'+i],source.x,source.y);}gl.uniform3f(u.uRippleSpread,this.ripples[0]?.spread||1,this.ripples[1]?.spread||1,this.ripples[2]?.spread||1);for(let i=0;i<3;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
   else{this.context.setTransform(dpr,0,0,dpr,0,0);this.drawFallback(l,now,sample,reduced);}
   this.frameMs=performance.now()-started;

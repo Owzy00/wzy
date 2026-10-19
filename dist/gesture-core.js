@@ -1,4 +1,13 @@
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const vector3=(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:(a.z||0)-(b.z||0)});
+const length3=v=>Math.hypot(v.x,v.y,v.z);
+// Reach along the finger's palm-local axis: translation, scale and hand rotation
+// do not become taps. Depth landmarks also capture a finger bending toward camera.
+function fingerBend(p,tip){
+ const base=p[tip-3],axis=vector3(base,p[0]),reach=vector3(p[tip],base);
+ const bones=length3(vector3(p[tip-2],base))+length3(vector3(p[tip-1],p[tip-2]))+length3(vector3(p[tip],p[tip-1]));
+ return 1-Math.max(-1,Math.min(1,(reach.x*axis.x+reach.y*axis.y+reach.z*axis.z)/Math.max(.00001,length3(axis)*bones)));
+}
 export function describeHand(landmarks,confidence=1,handCount=1){
  if(handCount!==1||confidence<.75||!landmarks||landmarks.length!==21||landmarks.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return null;
  const span=distance(landmarks[5],landmarks[17]);if(span<.045||span>.55)return null;
@@ -7,7 +16,7 @@ export function describeHand(landmarks,confidence=1,handCount=1){
  const folded=tips.map(t=>distance(landmarks[t],wrist)<distance(landmarks[t-2],wrist)*1.18&&distance(landmarks[t],landmarks[t-3])<span*.90);
  const count=extended.filter(Boolean).length;
  const palm=[0,5,9,13,17].reduce((s,i)=>({x:s.x+landmarks[i].x/5,y:s.y+landmarks[i].y/5}),{x:0,y:0});
- const fingers={index:{x:1-landmarks[8].x,y:landmarks[8].y,extended:extended[0]},ring:{x:1-landmarks[16].x,y:landmarks[16].y,extended:extended[2]}};
+ const fingers={index:{x:1-landmarks[8].x,y:landmarks[8].y,extended:extended[0],bend:fingerBend(landmarks,8)},ring:{x:1-landmarks[16].x,y:landmarks[16].y,extended:extended[2],bend:fingerBend(landmarks,16)}};
  return {pose:count>=3?'open':count===0&&folded.every(Boolean)?'fist':extended[0]&&count===1?'point':'neutral',palm:{x:1-palm.x,y:palm.y},tip:{x:fingers.index.x,y:fingers.index.y},fingers,confidence,span};
 }
 export class GestureMachine{
@@ -84,39 +93,59 @@ export class HandNavigator{
  }
 }
 
-// Particle input uses measured displacement, rather than a fast-frame velocity gate.
-// Small, consistent motion can emit at low camera rates; jitter/reacquisition cannot.
-export class HandParticleInput{
- constructor(){this.reset();}
- reset(){this.previous=null;this.point=null;this.anchor=null;this.lastPulse=-Infinity;}
+// A tap is an observed press AND rebound, never a fingertip displacement.
+// Ready -> pressing -> pressed -> rebound; each finger owns its cooldown.
+export class FingerTapInput{
+ constructor(){this.lastPulse=-Infinity;this.reset();}
+ reset(){this.previous=null;this.state='WAITING';this.readySince=null;this.readySamples=0;this.baseline=null;this.pressedSamples=0;this.pressSince=null;this.peak=0;}
  feed(sample,now,enabled=true){
-  const p=sample?.point??sample?.palm;
-  if(!enabled||!p||!Number.isFinite(now)||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1||sample.confidence<.75){this.reset();return null;}
+  const p=sample?.point;
+  if(!enabled||!p||!Number.isFinite(now)||!Number.isFinite(p.x)||!Number.isFinite(p.y)||!Number.isFinite(p.bend)||p.x<0||p.x>1||p.y<0||p.y>1||!Number.isFinite(sample.confidence)||sample.confidence<.75||!sample.palm||!Number.isFinite(sample.palm.x)||!Number.isFinite(sample.palm.y)){this.reset();return null;}
   const old=this.previous;if(old&&now<=old.t)return null;
-  const dt=old?(now-old.t)/1000:0,travel=old?distance(p,old):0,ratio=sample.span&&old?.span?sample.span/old.span:1;
-  this.previous={x:p.x,y:p.y,t:now,span:sample.span};
-  if(!old||dt>1.2||travel>Math.min(.42,Math.max(.18,dt*.9))||ratio<.6||ratio>1.6){
-   this.point={x:p.x,y:p.y};this.anchor={...this.point,t:now};return {...this.point,strength:0};
+  const ratio=sample.span&&old?.span?sample.span/old.span:1;
+  if(old&&(now-old.t>400||distance(p,old)>.20||distance(sample.palm,old.palm)>.16||ratio<.7||ratio>1.4))this.reset();
+  this.previous={x:p.x,y:p.y,t:now,span:sample.span,palm:{...sample.palm}};
+  const output={x:p.x,y:p.y,strength:0,tap:false};
+  if(now-this.lastPulse<480)return output;
+  if(this.state==='WAITING'){
+   if(!p.extended){this.readySince=null;this.readySamples=0;this.baseline=null;return output;}
+   if(this.baseline===null||Math.abs(p.bend-this.baseline)>.06){this.baseline=p.bend;this.readySince=now;this.readySamples=1;return output;}
+   this.readySamples++;
+   if(now-this.readySince>=100&&this.readySamples>=2)this.state='READY';
+   return output;
   }
-  const ease=1-Math.exp(-dt/.06);this.point.x+=(p.x-this.point.x)*ease;this.point.y+=(p.y-this.point.y)*ease;
-  const net=distance(this.point,this.anchor);let strength=0;
-  if(net>=.008&&now-this.lastPulse>=280){strength=Math.min(1.4,1.10+travel/Math.max(.04,dt)*1.5+net*1.8);this.lastPulse=now;this.anchor={...this.point,t:now};}
-  else if(now-this.anchor.t>700)this.anchor={...this.point,t:now};
-  return {...this.point,strength};
+  const delta=p.bend-this.baseline;
+  if(this.state==='READY'){
+   if(delta<.10){this.baseline+=(p.bend-this.baseline)*.08;return output;}
+   this.state='PRESSING';this.pressSince=now;this.peak=delta;
+  }
+  this.peak=Math.max(this.peak,delta);
+  const age=now-this.pressSince;
+  if(age>850){this.reset();return output;}
+  if(this.state==='PRESSING'){
+   if(delta<.07){this.reset();return output;}
+   if(age>450){this.reset();return output;}
+   if(delta>=.22){this.state='PRESSED';this.pressedSamples=1;this.pressPoint={x:p.x,y:p.y};this.pressedAt=now;}
+   return output;
+  }
+  if(delta>=.17){this.pressedSamples++;this.pressPoint={x:p.x,y:p.y};}
+  if(delta<=.07&&p.extended){
+   const tapped=this.pressedSamples>=2&&now-this.pressedAt>=50;
+   const point=this.pressPoint,peak=this.peak;this.reset();
+   if(tapped){this.lastPulse=now;return {...point,strength:Math.min(.95,.65+peak*.35),tap:true};}
+  }
+  return output;
  }
 }
-
-// Only these two visible, extended fingertips may emit gesture ripples.
-// Each channel owns its anchor and cooldown; moving one cannot spend the other's pulse.
 export class FingerParticleInput{
- constructor(){this.tracks={index:new HandParticleInput(),ring:new HandParticleInput()};}
+ constructor(){this.tracks={index:new FingerTapInput(),ring:new FingerTapInput()};}
  reset(){for(const track of Object.values(this.tracks))track.reset();}
  get previous(){return this.tracks.index.previous||this.tracks.ring.previous;}
  feed(sample,now,enabled=true){
   const inputs=[];
   for(const finger of ['index','ring']){
-   const tip=sample?.fingers?.[finger],valid=enabled&&tip?.extended===true;
-   const input=this.tracks[finger].feed(valid?{point:tip,span:sample.span,confidence:sample.confidence}:null,now,valid);
+   const tip=sample?.fingers?.[finger],valid=enabled&&!!tip;
+   const input=this.tracks[finger].feed(valid?{point:tip,palm:sample.palm,span:sample.span,confidence:sample.confidence}:null,now,valid);
    if(input)inputs.push({...input,finger});
   }
   return inputs;
