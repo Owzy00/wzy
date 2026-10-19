@@ -37,7 +37,7 @@ test('lost hands, disabled phases, stale frames, confidence and size jumps requi
 });
 test('hand ripple origins are mapped into the model while mouse positions and smooth translation are preserved',()=>{
  const stage=new StatueStage();stage.currentLayout=stage.layout(1280,720);stage.bounds={minX:-.25,maxX:.25,minY:-.48,maxY:.48};stage.timeline.start(0);
- assert.equal(stage.interact(.85,.85,500,.8,'hand'),true);const wave=stage.ripples[0];assert.ok(wave.x>.5&&wave.x<.7);assert.ok(wave.y>.7&&wave.y<.85);assert.ok(Math.abs(stage.pointerTarget.x-.7)<1e-10);assert.equal(stage.handRippleCount,1);
+ assert.equal(stage.interactFingers([{finger:'index',x:.85,y:.85,strength:.8}],500,{x:.85,y:.85}),1);const wave=stage.ripples[0];assert.ok(wave.x>.5&&wave.x<.7);assert.ok(wave.y>.7&&wave.y<.85);assert.ok(Math.abs(stage.pointerTarget.x-.7)<1e-10);assert.equal(stage.handRippleCount,1);
  assert.equal(stage.interact(.1,.2,900,1,'pointer'),true);assert.equal(stage.ripples[1].x,.1);assert.equal(stage.ripples[1].y,.2);assert.equal(stage.pointerRippleCount,1);
- stage.timeline.sample(9200);assert.equal(stage.interact(.5,.5,9500,1,'hand'),false);assert.equal(stage.handRippleCount,1);
+ stage.timeline.sample(9200);assert.equal(stage.interactFingers([{finger:'index',x:.5,y:.5,strength:1}],9500,{x:.5,y:.5}),0);assert.equal(stage.handRippleCount,1);
 });

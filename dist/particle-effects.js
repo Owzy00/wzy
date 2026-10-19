@@ -1,4 +1,4 @@
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=17';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=18';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -150,11 +150,11 @@ export class StatueStage{
  }
  start(item,now,sources=[]){
   if(this.busy||now<this.timeline.cooldownUntil)return false;
-  this.initRenderer();this.item=item;const prepared=this.prepare(item);this.points=prepared.points;this.bounds=prepared.bounds;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.handRippleCount=0;this.pointerRippleCount=0;this.lastRippleSource='';this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
+  this.initRenderer();this.item=item;const prepared=this.prepare(item);this.points=prepared.points;this.bounds=prepared.bounds;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.handRippleCount=0;this.fingerRippleCount={index:0,ring:0};this.fingerCooldowns={index:-Infinity,ring:-Infinity};this.lastPointerRipple=-Infinity;this.pointerRippleCount=0;this.lastRippleSource='';this.lastRippleFinger=null;this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
   const packed=prepared.packed;this.particleCount=packed.count;
   if(this.gl){this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.buffer);this.gl.bufferData(this.gl.ARRAY_BUFFER,packed.data,this.gl.STATIC_DRAW);}else this.prepareFallback();
   // Decode/upload before starting the clock so the first frame never skips ahead.
-  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect','star-flight-cloud');this.canvas.setAttribute('data-source-count',String(this.sources.length));this.canvas.setAttribute('data-hand-ripples','0');this.canvas.setAttribute('data-last-ripple-source','');return true;
+  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect','star-flight-cloud');this.canvas.setAttribute('data-source-count',String(this.sources.length));this.canvas.setAttribute('data-hand-ripples','0');this.canvas.setAttribute('data-last-ripple-source','');this.canvas.setAttribute('data-index-ripples','0');this.canvas.setAttribute('data-ring-ripples','0');this.canvas.setAttribute('data-last-ripple-finger','');return true;
  }
  finish(now){this.timeline.finish(now);}
  handPoint(x,y){
@@ -166,8 +166,23 @@ export class StatueStage{
  }
  interact(x,y,now,strength=0,source='pointer'){
   this.pointerTarget={x:(clamp01(x)-.5)*2,y:(clamp01(y)-.5)*2};
-  if(['GATHERING','HOLDING'].includes(this.timeline.state)&&strength>.18&&now-this.lastRipple>260){const p=source==='hand'?this.handPoint(x,y):{x:clamp01(x),y:clamp01(y)};this.lastRipple=now;this.lastRippleSource=source;if(source==='hand')this.handRippleCount=(this.handRippleCount||0)+1;else this.pointerRippleCount=(this.pointerRippleCount||0)+1;this.ripples.push({...p,time:now,strength:Math.min(1.4,strength),spread:source==='hand'?1.35:1});this.ripples=this.ripples.slice(-3);this.canvas?.setAttribute?.('data-last-ripple-source',source);this.canvas?.setAttribute?.('data-hand-ripples',String(this.handRippleCount||0));return true;}
-  return false;
+  return source==='pointer'&&this.emitRipple(x,y,now,strength,'pointer');
+ }
+ interactFingers(inputs,now,palm){
+  // Retain smooth whole-model parallax, without letting the palm emit a wave.
+  if(palm&&Number.isFinite(palm.x)&&Number.isFinite(palm.y))this.pointerTarget={x:(clamp01(palm.x)-.5)*2,y:(clamp01(palm.y)-.5)*2};
+  let count=0;for(const input of inputs){if(!['index','ring'].includes(input.finger))continue;if(this.emitRipple(input.x,input.y,now,input.strength,'hand',input.finger))count++;}
+  return count;
+ }
+ emitRipple(x,y,now,strength,source,finger=null){
+  const hand=source==='hand';if(hand&&!['index','ring'].includes(finger))return false;
+  const last=hand?(this.fingerCooldowns?.[finger]??-Infinity):(this.lastPointerRipple??-Infinity);
+  if(![x,y,now,strength].every(Number.isFinite)||!['GATHERING','HOLDING'].includes(this.timeline.state)||strength<=.18||now-last<=260)return false;
+  const p=hand?this.handPoint(x,y):{x:clamp01(x),y:clamp01(y)};this.lastRipple=now;this.lastRippleSource=source;this.lastRippleFinger=finger;
+  if(hand){this.fingerCooldowns??={};this.fingerCooldowns[finger]=now;this.fingerRippleCount??={index:0,ring:0};this.fingerRippleCount[finger]++;this.handRippleCount=(this.handRippleCount||0)+1;}else{this.lastPointerRipple=now;this.pointerRippleCount=(this.pointerRippleCount||0)+1;}
+  this.ripples.push({...p,time:now,strength:Math.min(1.4,strength),spread:hand?1.35:1,...(hand?{finger}:{} )});this.ripples=this.ripples.slice(-3);
+  for(const [key,value]of Object.entries({'last-ripple-source':source,'last-ripple-finger':finger||'','hand-ripples':this.handRippleCount||0,'index-ripples':this.fingerRippleCount?.index||0,'ring-ripples':this.fingerRippleCount?.ring||0}))this.canvas?.setAttribute?.('data-'+key,String(value));
+  return true;
  }
 
  prepareFallback(){

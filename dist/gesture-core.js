@@ -7,7 +7,8 @@ export function describeHand(landmarks,confidence=1,handCount=1){
  const folded=tips.map(t=>distance(landmarks[t],wrist)<distance(landmarks[t-2],wrist)*1.18&&distance(landmarks[t],landmarks[t-3])<span*.90);
  const count=extended.filter(Boolean).length;
  const palm=[0,5,9,13,17].reduce((s,i)=>({x:s.x+landmarks[i].x/5,y:s.y+landmarks[i].y/5}),{x:0,y:0});
- return {pose:count>=3?'open':count===0&&folded.every(Boolean)?'fist':extended[0]&&count===1?'point':'neutral',palm:{x:1-palm.x,y:palm.y},tip:{x:1-landmarks[8].x,y:landmarks[8].y},confidence,span};
+ const fingers={index:{x:1-landmarks[8].x,y:landmarks[8].y,extended:extended[0]},ring:{x:1-landmarks[16].x,y:landmarks[16].y,extended:extended[2]}};
+ return {pose:count>=3?'open':count===0&&folded.every(Boolean)?'fist':extended[0]&&count===1?'point':'neutral',palm:{x:1-palm.x,y:palm.y},tip:{x:fingers.index.x,y:fingers.index.y},fingers,confidence,span};
 }
 export class GestureMachine{
  constructor(){this.state='IDLE';this.pose='neutral';this.since=0;this.lastTime=-1;this.lastSeen=-1;this.cooldownUntil=0;this.progress=0;this.lastSelection=null;this.disarm();}
@@ -89,7 +90,7 @@ export class HandParticleInput{
  constructor(){this.reset();}
  reset(){this.previous=null;this.point=null;this.anchor=null;this.lastPulse=-Infinity;}
  feed(sample,now,enabled=true){
-  const p=sample?.palm;
+  const p=sample?.point??sample?.palm;
   if(!enabled||!p||!Number.isFinite(now)||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1||sample.confidence<.75){this.reset();return null;}
   const old=this.previous;if(old&&now<=old.t)return null;
   const dt=old?(now-old.t)/1000:0,travel=old?distance(p,old):0,ratio=sample.span&&old?.span?sample.span/old.span:1;
@@ -102,5 +103,22 @@ export class HandParticleInput{
   if(net>=.008&&now-this.lastPulse>=280){strength=Math.min(1.4,1.10+travel/Math.max(.04,dt)*1.5+net*1.8);this.lastPulse=now;this.anchor={...this.point,t:now};}
   else if(now-this.anchor.t>700)this.anchor={...this.point,t:now};
   return {...this.point,strength};
+ }
+}
+
+// Only these two visible, extended fingertips may emit gesture ripples.
+// Each channel owns its anchor and cooldown; moving one cannot spend the other's pulse.
+export class FingerParticleInput{
+ constructor(){this.tracks={index:new HandParticleInput(),ring:new HandParticleInput()};}
+ reset(){for(const track of Object.values(this.tracks))track.reset();}
+ get previous(){return this.tracks.index.previous||this.tracks.ring.previous;}
+ feed(sample,now,enabled=true){
+  const inputs=[];
+  for(const finger of ['index','ring']){
+   const tip=sample?.fingers?.[finger],valid=enabled&&tip?.extended===true;
+   const input=this.tracks[finger].feed(valid?{point:tip,span:sample.span,confidence:sample.confidence}:null,now,valid);
+   if(input)inputs.push({...input,finger});
+  }
+  return inputs;
  }
 }

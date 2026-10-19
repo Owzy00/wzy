@@ -17,13 +17,13 @@ async function scene(run){
  globalThis.fetch=async()=>({ok:true,json:async()=>({items:Array.from({length:28},(_,id)=>({id,name:'宿'+id,title:'彩塑'+id,pinyin:'test'}))})});
  globalThis.requestIdleCallback=callback=>idle.push(callback);globalThis.cancelIdleCallback=()=>{};
  let callbacks,selected=3,selectedCount=0,panDistance=0,morphs=0,starts=0,stops=0,restores=0,touches=0;
- const stage={timeline:new MorphTimeline(),get busy(){return this.timeline.busy;},get occludesSky(){return this.busy;},prepare(){},interact(...args){this.lastInteraction=args;(this.interactions??=[]).push(args);touches++;},start(item,now,sources){this.sources=sources;if(!this.timeline.start(now))return false;this.item=item;morphs++;return true;},draw(ctx,now){return this.timeline.sample(now);},finish(now){this.timeline.finish(now);},pointer:{}};
+ const stage={timeline:new MorphTimeline(),get busy(){return this.timeline.busy;},get occludesSky(){return this.busy;},prepare(){},interact(...args){this.lastInteraction=args;(this.interactions??=[]).push(args);touches++;},interactFingers(inputs,now,palm){this.lastFingers=inputs;this.interact(palm.x,palm.y,now,Math.max(0,...inputs.map(p=>p.strength)),'hand');},start(item,now,sources){this.sources=sources;if(!this.timeline.start(now))return false;this.item=item;morphs++;return true;},draw(ctx,now){return this.timeline.sample(now);},finish(now){this.timeline.finish(now);},pointer:{}};
  const camera={running:false,inferenceMs:30,async start(){starts++;this.running=true;callbacks.onStatus('running','已接入');},stop(){stops++;this.running=false;callbacks.onStatus('off','已关闭');}};
  const adapter={emissionSources:()=>[{x:.3,y:.4},{x:.5,y:.6}],selected:()=>({id:selected,name:'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
  try{
   const experience=initExperience(adapter,{cameraFactory:(video,c)=>{callbacks=c;return camera;},stageFactory:()=>stage});
   await new Promise(resolve=>setImmediate(resolve));
-  await run({styles,experience,stage,camera,element,listeners,classes,callbacks,counts:()=>({starts,stops,morphs,selectedCount,panDistance,restores,touches}),emit:(pose,time,x=.5)=>callbacks.onSample(pose?{pose,palm:{x,y:.5},span:.15}:null,time,null,pose?1:0)});
+  await run({styles,experience,stage,camera,element,listeners,classes,callbacks,counts:()=>({starts,stops,morphs,selectedCount,panDistance,restores,touches}),emit:(pose,time,x=.5)=>callbacks.onSample(pose?{pose,palm:{x,y:.5},fingers:{index:{x:x+.02,y:.5,extended:true},ring:{x:x-.02,y:.5,extended:true}},span:.15}:null,time,null,pose?1:0)});
  }finally{for(const [name,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 }
 
@@ -56,14 +56,14 @@ test('prepared particle data is reused and bounded to two mansions',()=>{
 });
 
 test('real landmark samples at 2 FPS create real stage ripples during generation and holding',async()=>scene(async s=>{
- const renderer=new StatueStage();renderer.timeline=s.stage.timeline;renderer.currentLayout=renderer.layout(1000,800);renderer.bounds={minX:-.3,maxX:.3,minY:-.48,maxY:.48};s.stage.interact=(...args)=>renderer.interact(...args);
+ const renderer=new StatueStage();renderer.timeline=s.stage.timeline;renderer.currentLayout=renderer.layout(1000,800);renderer.bounds={minX:-.3,maxX:.3,minY:-.48,maxY:.48};s.stage.interactFingers=(...args)=>renderer.interactFingers(...args);
  await s.element('morph-trigger').onclick();const start=s.stage.timeline.started;
  function emitLandmarks(time,dx=0,count=1){
   const points=Array.from({length:21},()=>({x:.5+dx,y:.67,z:0}));points[0]={x:.5+dx,y:.72};for(const [i,mcp]of [5,9,13,17].entries()){const x=.35+i*.12+dx;points[mcp]={x,y:.52};points[mcp+1]={x,y:.32};points[mcp+2]={x,y:.17};points[mcp+3]={x,y:.04};}
   const sample=describeHand(points,.96,count);s.callbacks.onSample(sample,time,null,count);
  }
  for(let i=0;i<5;i++){const time=start+500+i*500;s.experience.draw(null,time,1000,800,null,false);s.experience.beforeFrame(time);assert.equal(s.camera.suspended,false);emitLandmarks(time,i*.01);}
- assert.ok(renderer.handRippleCount>=3);assert.ok(renderer.ripples.every(r=>r.strength>=.7));const gathered=renderer.handRippleCount;
+ assert.ok(renderer.fingerRippleCount.index>=3);assert.ok(renderer.fingerRippleCount.ring>=3);assert.ok(renderer.ripples.every(r=>['index','ring'].includes(r.finger)));assert.ok(renderer.ripples.every(r=>r.strength>=.7));const gathered=renderer.handRippleCount;
  const hold=start+s.stage.timeline.duration.gather;
  for(let i=0;i<4;i++){const time=hold+100+i*500;s.experience.draw(null,time,1000,800,null,false);s.experience.beforeFrame(time);emitLandmarks(time,.04+i*.01);}
  assert.ok(renderer.handRippleCount>gathered);const held=renderer.handRippleCount;emitLandmarks(hold+1800,.08,2);emitLandmarks(hold+2000,.09);assert.equal(renderer.handRippleCount,held);
