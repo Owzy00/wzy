@@ -1,4 +1,4 @@
-import {describeHand} from './gesture-core.js?v=20';
+import {describeHand} from './gesture-core.js?v=21';
 export function createHandWorker(){
  if(globalThis.XINGYE_WORKER_SOURCE){const url=URL.createObjectURL(new Blob([globalThis.XINGYE_WORKER_SOURCE],{type:'text/javascript'}));const worker=new Worker(url,{type:'module'});URL.revokeObjectURL(url);return worker;}
  return new Worker(new URL('./hand-worker.js',import.meta.url),{type:'module'});
@@ -13,7 +13,7 @@ export async function createMainHandDetector(){
  return HandLandmarker.createFromOptions(files,{baseOptions:{modelAssetPath:model,delegate:'CPU'},runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.72,minHandPresenceConfidence:.72,minTrackingConfidence:.72});
 }
 export class GestureCamera{
- constructor(video,{onSample,onStatus,workerFactory=createHandWorker,detectorFactory=createMainHandDetector}){this.video=video;this.onSample=onSample;this.onStatus=onStatus;this.workerFactory=workerFactory;this.detectorFactory=detectorFactory;this.generation=0;this.running=false;this.inferenceMs=0;this.sent=0;this.received=0;this.backend='off';this.workerError=null;}
+ constructor(video,{onSample,onStatus,workerFactory=createHandWorker,detectorFactory=createMainHandDetector}){this.video=video;this.onSample=onSample;this.onStatus=onStatus;this.workerFactory=workerFactory;this.detectorFactory=detectorFactory;this.generation=0;this.running=false;this.inferenceMs=0;this.sent=0;this.received=0;this.backend='off';this.workerError=null;this.latencyMs=0;this.sampleHz=0;this.lastResultAt=null;this.lastVideoTime=-1;}
  async start(){
   if(this.running||this.starting)return;
   if(!navigator.mediaDevices?.getUserMedia||!isSecureContext){this.onStatus('error','摄像头需要 HTTPS，请通过星野在线网址打开。');return;}
@@ -36,18 +36,36 @@ export class GestureCamera{
     this.detector=detector;this.backend='main';
    }
    if(generation!==this.generation)return;
-   this.running=true;this.starting=false;this.busy=false;
-   if(this.worker){this.worker.onmessage=({data})=>{if(generation!==this.generation)return;this.busy=false;if(data.type==='result'){this.received++;this.inferenceMs=data.inferenceMs;this.onSample(describeHand(data.landmarks,data.confidence,data.handCount),performance.now(),data.landmarks,data.handCount);}else if(data.type==='error'){this.stop();this.onStatus('error','识别中断：'+data.message);}};this.worker.onerror=event=>{const message=event.message||'识别线程运行中断';this.stop();this.onStatus('error',message);};}
+   this.running=true;this.starting=false;this.busy=false;this.lastVideoTime=-1;this.lastResultAt=null;
+   if(this.worker){this.worker.onmessage=({data})=>{if(generation!==this.generation)return;this.busy=false;if(data.type==='result'){this.deliver(data.landmarks,data.confidence,data.handCount,data.timestamp,data.inferenceMs);this.schedule(generation,Math.max(4,33-(performance.now()-(this.lastCaptureAt||0))));}else if(data.type==='error'){this.stop();this.onStatus('error','识别中断：'+data.message);}};this.worker.onerror=event=>{const message=event.message||'识别线程运行中断';this.stop();this.onStatus('error',message);};}
    this.onStatus('running','摄像头已接入 · 移手环顾，握拳点亮，张掌化形。收起面板仍可交互。');this.loop(generation);
   }catch(error){if(generation!==this.generation)return;const detail=this.workerError;this.stop();const message=error.name==='NotAllowedError'?'摄像头未获授权：请点击地址栏左侧的权限图标，允许此网页使用摄像头后重试。':error.name==='NotFoundError'?'未找到摄像头，请连接摄像头后重试。':error.name==='NotReadableError'?'摄像头被其他程序占用或无法读取，请关闭其他视频程序后重试。':error.message+(detail?'；线程错误：'+detail:'');this.onStatus('error',message);}
  }
+ deliver(landmarks,confidence,handCount,capturedAt,inferenceMs){
+  const receivedAt=performance.now(),time=Number.isFinite(capturedAt)&&capturedAt<=receivedAt?capturedAt:receivedAt;
+  this.received++;this.inferenceMs=inferenceMs;this.latencyMs=Math.max(0,receivedAt-time);
+  if(this.lastResultAt!==null){const hz=1000/Math.max(1,receivedAt-this.lastResultAt);this.sampleHz=this.sampleHz?this.sampleHz*.8+hz*.2:hz;}this.lastResultAt=receivedAt;
+  this.onSample(describeHand(landmarks,confidence,handCount),time,landmarks,handCount,{receivedAt,latencyMs:this.latencyMs});
+ }
+ schedule(generation,delay=33){clearTimeout(this.timer);if(this.running&&generation===this.generation)this.timer=setTimeout(()=>this.loop(generation),delay);}
  async loop(generation){
-  if(!this.running||generation!==this.generation)return;
-  if(!this.suspended&&!this.busy&&this.video.readyState>=2){this.busy=true;try{const bitmap=await createImageBitmap(this.video,{resizeWidth:360,resizeHeight:270,resizeQuality:'low'});if(!this.running||generation!==this.generation){bitmap.close();return;}this.sent++;
-   if(this.detector){const started=performance.now();let result;try{result=this.detector.detectForVideo(bitmap,started);}finally{bitmap.close();}this.inferenceMs=performance.now()-started;this.received++;this.busy=false;const landmarks=result.landmarks[0]||null,handCount=result.landmarks.length;this.onSample(describeHand(landmarks,result.handedness?.[0]?.[0]?.score||0,handCount),performance.now(),landmarks,handCount);}
-   else this.worker.postMessage({type:'frame',bitmap,timestamp:performance.now()},[bitmap]);
-  }catch(error){this.stop();this.onStatus('error','视频识别失败：'+error.message);return;}}
-  this.timer=setTimeout(()=>this.loop(generation),this.suspended?150:Math.max(20,55-(this.detector?this.inferenceMs:0)));
+  if(!this.running||generation!==this.generation||this.busy)return;
+  if(this.suspended||this.video.readyState<2){this.schedule(generation,this.suspended?150:33);return;}
+  const videoTime=this.video.currentTime;
+  if(Number.isFinite(videoTime)&&videoTime===this.lastVideoTime){this.schedule(generation,12);return;}
+  this.lastVideoTime=videoTime;this.busy=true;
+  const capturedAt=performance.now();this.lastCaptureAt=capturedAt;
+  try{
+   const bitmap=await createImageBitmap(this.video,{resizeWidth:360,resizeHeight:270,resizeQuality:'low'});
+   if(!this.running||generation!==this.generation){bitmap.close();return;}this.sent++;
+   if(this.detector){
+    const started=performance.now();let result;try{result=this.detector.detectForVideo(bitmap,capturedAt);}finally{bitmap.close();}
+    this.busy=false;this.deliver(result.landmarks[0]||null,result.handedness?.[0]?.[0]?.score||0,result.landmarks.length,capturedAt,performance.now()-started);
+    this.schedule(generation,Math.max(8,33-(performance.now()-capturedAt)));
+   }else this.worker.postMessage({type:'frame',bitmap,timestamp:capturedAt},[bitmap]);
+   // Worker completion schedules the next fresh frame: no extra 55 ms polling wait,
+   // and never more than one inference in flight.
+  }catch(error){this.stop();this.onStatus('error','视频识别失败：'+error.message);}
  }
  stop(){this.generation++;clearTimeout(this.timer);this.running=false;this.starting=false;this.busy=false;this.worker?.terminate();this.worker=null;this.detector?.close();this.detector=null;this.backend='off';this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;this.video.pause();this.video.srcObject=null;this.onSample(null,performance.now(),null,0);this.onStatus('off','手势已关闭，摄像头已释放。');}
 }

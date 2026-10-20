@@ -1,15 +1,61 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>星野 · 手掌拖动验证</title>
 <style>body{margin:0;background:#080b0f;color:#dfd2ac;font:14px system-ui}main{padding:24px;position:relative;z-index:2}h1{font:22px serif}button{margin:4px;padding:10px;background:#10171d;border:1px solid #9c8653;color:#e2c982}canvas{position:fixed;inset:0}output{display:block;margin:16px 0;color:#e4cb83}p{max-width:720px;color:#9eacb7}</style>
-<canvas id="sky"></canvas><main><h1>手掌像鼠标一样拖动画布</h1><button id="slow">慢速拖到同一位置</button><button id="fast">快速拖到同一位置</button><button id="loop">拖动后原路返回</button><output id="readout">准备中</output><p>模拟张掌数据通过实际 HandNavigator 与天文投影函数回放。不申请摄像头，不代表真人手感实测。十字固定，亮星随画布移动；停手后不继续漂移。</p></main>
+<canvas id="sky"></canvas><main><h1>手掌像鼠标一样拖动画布</h1><button id="slow">慢速拖到同一位置</button><button id="fast">快速拖到同一位置</button><button id="loop">拖动后原路返回</button><button id="low-rate">10Hz 连续性对比</button><button id="uncertain">短暂误识别对比</button><button id="live">播放低帧率拖动</button><canvas id="trace" style="inset:auto 24px 24px auto;width:400px;height:150px;background:#0a1118dd;border:1px solid #8a794a44;z-index:3" hidden></canvas><output id="readout">准备中</output><p>模拟张掌数据通过实际 HandNavigator 与天文投影函数回放；蓝线为 v20，金线为 v21。不申请摄像头，不代表真人手感实测。十字固定，亮星随画布移动；停手后不继续漂移。</p></main>
 <script type="module">
-import {HandNavigator} from './gesture-core.js?v=20';
-import {panSky,projectAtlas} from './astronomy.js?v=20';
-const c=document.querySelector('#sky'),ctx=c.getContext('2d'),out=document.querySelector('#readout'),camera={ra:3,dec:0,zoom:1,fov:1.5};let viewport;
-function paint(){c.width=innerWidth;c.height=innerHeight;viewport={w:innerWidth*.72,h:innerHeight*.55,cx:innerWidth*.5,cy:innerHeight*.60};ctx.fillStyle='#080b0f';ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle='#364047';ctx.beginPath();ctx.moveTo(viewport.cx-16,viewport.cy);ctx.lineTo(viewport.cx+16,viewport.cy);ctx.moveTo(viewport.cx,viewport.cy-16);ctx.lineTo(viewport.cx,viewport.cy+16);ctx.stroke();for(let i=0;i<300;i++){const ra=3+(i*.6180339%1-.5)*6,dec=(i*.7548776%1-.5)*3,p=projectAtlas(ra,dec,camera,viewport);ctx.fillStyle=i%11?'#879aad':'#e4c46c';ctx.fillRect(p.x,p.y,i%11?1:3,i%11?1:3);}const p=projectAtlas(3,0,camera,viewport);ctx.fillStyle='#ffe19a';ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fill();}
-function replay(kind){camera.ra=3;camera.dec=0;paint();const n=new HandNavigator(),duration=kind==='fast'?300:1200;let dx=0,dy=0,endX=0,drift=0;
+import {HandNavigator} from './gesture-core.js?v=21';
+import {panSky,projectAtlas} from './astronomy.js?v=21';
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+class PreviousNavigator{
+ constructor(){this.reset();}
+ reset(){this.previous=null;this.anchor=null;this.accepted=null;this.target={x:0,y:0};this.applied={x:0,y:0};this.motion={x:0,y:0};this.frameTime=null;this.lastSample=-1;}
+ feed(sample,now){
+  if(!sample||sample.pose!=='open'){this.reset();return;}
+  if(now<=this.lastSample)return;
+  let old=this.previous;
+  const ratio=sample.span&&old?.span?sample.span/old.span:1;
+  if(old&&(now-old.t>400||distance(sample.palm,old)>.18||ratio<.6||ratio>1.6)){this.reset();old=null;}
+  this.lastSample=now;this.previous={...sample.palm,t:now,span:sample.span};
+  if(!old){this.anchor={...sample.palm};this.accepted={...sample.palm};this.frameTime=now;return;}
+  const dt=Math.max(.025,(now-old.t)/1000);
+  this.motion={x:(sample.palm.x-old.x)/dt,y:(sample.palm.y-old.y)/dt};
+  if(distance(sample.palm,this.accepted)<.0018)return;
+  this.accepted={...sample.palm};
+  this.target={x:sample.palm.x-this.anchor.x,y:sample.palm.y-this.anchor.y};
+ }
+ step(now){
+  if(this.lastSample<0||now-this.lastSample>220){this.applied={...this.target};this.frameTime=now;return {dx:0,dy:0};}
+  const dt=this.frameTime===null?0:Math.max(0,Math.min(.05,(now-this.frameTime)/1000));this.frameTime=now;
+  const ease=1-Math.exp(-dt/.035),next={x:this.applied.x+(this.target.x-this.applied.x)*ease,y:this.applied.y+(this.target.y-this.applied.y)*ease};
+  for(const axis of ['x','y'])if(Math.abs(this.target[axis]-next[axis])<.0001)next[axis]=this.target[axis];
+  const delta={dx:next.x-this.applied.x,dy:next.y-this.applied.y};this.applied=next;return delta;
+ }
+}
+
+
+const c=document.querySelector('#sky'),ctx=c.getContext('2d'),out=document.querySelector('#readout'),camera={ra:3,dec:0,zoom:1,fov:1.5};let viewport,animation=0;
+function paint(){if(c.width!==innerWidth)c.width=innerWidth;if(c.height!==innerHeight)c.height=innerHeight;viewport={w:innerWidth*.72,h:innerHeight*.55,cx:innerWidth*.5,cy:innerHeight*.60};ctx.fillStyle='#080b0f';ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle='#364047';ctx.beginPath();ctx.moveTo(viewport.cx-16,viewport.cy);ctx.lineTo(viewport.cx+16,viewport.cy);ctx.moveTo(viewport.cx,viewport.cy-16);ctx.lineTo(viewport.cx,viewport.cy+16);ctx.stroke();for(let i=0;i<300;i++){const ra=3+(i*.6180339%1-.5)*6,dec=(i*.7548776%1-.5)*3,p=projectAtlas(ra,dec,camera,viewport);ctx.fillStyle=i%11?'#879aad':'#e4c46c';ctx.fillRect(p.x,p.y,i%11?1:3,i%11?1:3);}const p=projectAtlas(3,0,camera,viewport);ctx.fillStyle='#ffe19a';ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fill();}
+function replay(kind){cancelAnimationFrame(animation);document.querySelector('#trace').hidden=true;camera.ra=3;camera.dec=0;paint();const n=new HandNavigator(),duration=kind==='fast'?300:1200;let dx=0,dy=0,endX=0,drift=0;
  for(let t=0;t<=duration+350;t+=10){const f=Math.min(1,t/duration),travel=kind==='loop'?(f<.5?f*2:2-f*2):f;if(t%50===0)n.feed({pose:'open',palm:{x:.35+.18*travel,y:.5+.06*travel},span:.15},t);const d=n.step(t);dx+=d.dx;dy+=d.dy;Object.assign(camera,panSky(camera,'atlas',viewport,d.dx,d.dy));if(t===duration+200)endX=dx;if(t>duration+200)drift+=Math.abs(d.dx)+Math.abs(d.dy);}
  paint();out.textContent='已拖动 '+(dx*100).toFixed(2)+'% / '+(dy*100).toFixed(2)+'% · 停手漂移 '+drift.toFixed(6);
  out.dataset.mode=kind;out.dataset.dx=dx.toFixed(5);out.dataset.dy=dy.toFixed(5);out.dataset.drift=drift.toFixed(6);
 }
-for(const mode of ['slow','fast','loop'])document.querySelector('#'+mode).onclick=()=>replay(mode);addEventListener('resize',paint);replay('slow');
+
+function runTrace(C,uncertain=false){const n=new C(),speeds=[];let total=0,drift=0;
+ for(let t=0;t<=2400;t+=10){if(t%100===0)n.feed({pose:uncertain&&t%500===200?'neutral':'open',palm:{x:.3+.12*Math.min(t,1800)/1000,y:.5},span:.15},t);const d=n.step(t);total+=d.dx;if(t>=500&&t<1700)speeds.push(d.dx/.01);if(t>2200)drift+=Math.abs(d.dx);}
+ const mean=speeds.reduce((s,v)=>s+v,0)/speeds.length,cv=Math.sqrt(speeds.reduce((s,v)=>s+(v-mean)**2,0)/speeds.length)/mean;return {total,drift,cv,speeds};
+}
+function compare(kind){cancelAnimationFrame(animation);const old=runTrace(PreviousNavigator,kind==='uncertain'),fresh=runTrace(HandNavigator,kind==='uncertain');const chart=document.querySelector('#trace');chart.hidden=false;chart.width=800;chart.height=300;const g=chart.getContext('2d');g.clearRect(0,0,800,300);
+ for(const [result,color]of [[old,'#8caedb'],[fresh,'#e7c96b']]){g.strokeStyle=color;g.lineWidth=3;g.beginPath();result.speeds.forEach((v,i)=>{const x=24+i*750/(result.speeds.length-1),y=250-Math.min(.4,v)*550;if(i)g.lineTo(x,y);else g.moveTo(x,y);});g.stroke();}
+ g.fillStyle='#a6b4c3';g.font='22px sans-serif';g.fillText('同一移动轨迹：每 100ms 识别一次',24,35);
+ camera.ra=3;camera.dec=0;paint();Object.assign(camera,panSky(camera,'atlas',viewport,fresh.total,0));paint();
+ out.textContent='10Hz 回放 · v20 位移 '+(old.total*100).toFixed(2)+'% → v21 '+(fresh.total*100).toFixed(2)+'% · 速度波动 '+old.cv.toFixed(3)+' → '+fresh.cv.toFixed(3)+' · 停手漂移 '+fresh.drift.toFixed(6);
+ Object.assign(out.dataset,{mode:kind,dx:fresh.total.toFixed(5),drift:fresh.drift.toFixed(6),beforeCv:old.cv.toFixed(4),afterCv:fresh.cv.toFixed(4),beforeDx:old.total.toFixed(5)});
+}
+function live(){cancelAnimationFrame(animation);document.querySelector('#trace').hidden=true;camera.ra=3;camera.dec=0;paint();const n=new HandNavigator(),start=performance.now();let next=0,total=0;out.dataset.mode='playing';
+ function frame(now){const t=now-start;while(next<=Math.min(t,2200)){n.feed({pose:'open',palm:{x:.3+.12*Math.min(next,1800)/1000,y:.5},span:.15},start+next,now);next+=100;}const d=n.step(now);total+=d.dx;Object.assign(camera,panSky(camera,'atlas',viewport,d.dx,d.dy));paint();out.textContent='10Hz 实时回放 · 星图位移 '+(total*100).toFixed(2)+'%';
+ if(t<2600)animation=requestAnimationFrame(frame);else Object.assign(out.dataset,{mode:'live-complete',dx:total.toFixed(5)});
+ }animation=requestAnimationFrame(frame);
+}
+for(const mode of ['slow','fast','loop'])document.querySelector('#'+mode).onclick=()=>replay(mode);
+document.querySelector('#low-rate').onclick=()=>compare('low-rate');document.querySelector('#uncertain').onclick=()=>compare('uncertain');document.querySelector('#live').onclick=live;addEventListener('resize',paint);replay('slow');
 </script></html>

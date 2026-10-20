@@ -76,30 +76,40 @@ export class GestureMachine{
  }
 }
 
-// Position-anchored dragging, like a pointer held on the canvas.
-// Display frames settle toward a measured position; they never integrate velocity.
+// Resample measured palm positions at display cadence. Interpolation stays
+// between observations: no velocity extrapolation or post-release inertia.
 export class HandNavigator{
  constructor(){this.reset();}
- reset(){this.previous=null;this.anchor=null;this.accepted=null;this.target={x:0,y:0};this.applied={x:0,y:0};this.motion={x:0,y:0};this.frameTime=null;this.lastSample=-1;}
- feed(sample,now){
-  if(!sample||sample.pose!=='open'){this.reset();return;}
-  if(now<=this.lastSample)return;
+ reset(){this.previous=null;this.anchor=null;this.accepted=null;this.target={x:0,y:0};this.applied={x:0,y:0};this.motion={x:0,y:0};this.frames=[];this.interval=50;this.transport=0;this.lastSample=-1;this.lastArrival=-1;this.lastOpen=-1;this.missing=false;this.precisionUntil=-1;}
+ feed(sample,now,receivedAt=now){
+  if(!Number.isFinite(now)||now<=this.lastSample)return;
+  if(!sample){
+   if(!this.previous||now-this.lastSample>180)this.reset();else this.missing=true;
+   return;
+  }
+  const allowed=sample.pose==='open'||(sample.pose==='neutral'&&this.previous&&now-this.lastOpen<=180);
+  if(!allowed){this.reset();return;}
   let old=this.previous;
   const ratio=sample.span&&old?.span?sample.span/old.span:1;
-  if(old&&(now-old.t>400||distance(sample.palm,old)>.18||ratio<.6||ratio>1.6)){this.reset();old=null;}
-  this.lastSample=now;this.previous={...sample.palm,t:now,span:sample.span};
-  if(!old){this.anchor={...sample.palm};this.accepted={...sample.palm};this.frameTime=now;return;}
-  const dt=Math.max(.025,(now-old.t)/1000);
-  this.motion={x:(sample.palm.x-old.x)/dt,y:(sample.palm.y-old.y)/dt};
-  if(distance(sample.palm,this.accepted)<.0018)return;
-  this.accepted={...sample.palm};
-  this.target={x:sample.palm.x-this.anchor.x,y:sample.palm.y-this.anchor.y};
+  if(old&&(now-old.t>600||distance(sample.palm,old)>.18||ratio<.6||ratio>1.6||(this.missing&&distance(sample.palm,old)>.04))){this.reset();old=null;}
+  this.missing=false;this.lastSample=now;this.lastArrival=Math.max(now,receivedAt);if(sample.pose==='open')this.lastOpen=now;
+  this.previous={...sample.palm,t:now,span:sample.span};
+  if(!old){this.anchor={...sample.palm};this.accepted={...sample.palm};this.frames=[{t:now,x:0,y:0}];return;}
+  const dt=now-old.t;
+  this.interval=this.frames.length===1?Math.min(120,Math.max(25,dt)):this.interval*.8+Math.min(160,Math.max(16,dt))*.2;
+  this.transport=this.transport*.75+Math.min(160,Math.max(0,receivedAt-now))*.25;
+  this.motion={x:(sample.palm.x-old.x)/Math.max(.025,dt/1000),y:(sample.palm.y-old.y)/Math.max(.025,dt/1000)};
+  if(distance(sample.palm,this.accepted)>=(now<this.precisionUntil?.0007:.0018)){this.precisionUntil=now+200;this.accepted={...sample.palm};this.target={x:sample.palm.x-this.anchor.x,y:sample.palm.y-this.anchor.y};}
+  this.frames.push({t:now,...this.target});if(this.frames.length>16)this.frames.shift();
  }
  step(now){
-  if(this.lastSample<0||now-this.lastSample>220){this.applied={...this.target};this.frameTime=now;return {dx:0,dy:0};}
-  const dt=this.frameTime===null?0:Math.max(0,Math.min(.05,(now-this.frameTime)/1000));this.frameTime=now;
-  const ease=1-Math.exp(-dt/.035),next={x:this.applied.x+(this.target.x-this.applied.x)*ease,y:this.applied.y+(this.target.y-this.applied.y)*ease};
-  for(const axis of ['x','y'])if(Math.abs(this.target[axis]-next[axis])<.0001)next[axis]=this.target[axis];
+  if(!this.frames.length)return {dx:0,dy:0};
+  const time=now-Math.min(220,Math.max(28,this.interval+this.transport));
+  while(this.frames.length>2&&this.frames[1].t<=time)this.frames.shift();
+  const a=this.frames[0],b=this.frames[1]||a,amount=b.t===a.t?1:Math.max(0,Math.min(1,(time-a.t)/(b.t-a.t)));
+  let next={x:a.x+(b.x-a.x)*amount,y:a.y+(b.y-a.y)*amount};
+  // The buffer can contain a more recent endpoint after a long paused frame.
+  const last=this.frames.at(-1);if(time>=last.t)next={x:last.x,y:last.y};
   const delta={dx:next.x-this.applied.x,dy:next.y-this.applied.y};this.applied=next;return delta;
  }
 }

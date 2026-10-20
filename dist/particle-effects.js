@@ -1,5 +1,5 @@
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=20';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=20';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=21';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=21';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};

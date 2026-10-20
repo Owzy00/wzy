@@ -70,3 +70,9 @@ test('real coordinator supports every moving fingertip during generation and hol
  const leave=start+s.stage.timeline.duration.gather+s.stage.timeline.duration.hold+100;emit(leave,p);assert.equal(s.camera.suspended,true);p[12].x+=.03;emit(leave+100,p);assert.equal(renderer.handRippleCount,held);
  assert.equal(s.counts().morphs,1);assert.equal(s.counts().selectedCount,0);assert.equal(s.counts().starts,1);assert.equal(s.counts().stops,0);
 }));
+
+test('coordinator preserves a drag across brief uncertain poses instead of reanchoring each time',async()=>scene(async s=>{
+ const base=performance.now()+1000;
+ for(let t=0;t<=2400;t+=10){if(t%100===0)s.emit(t%500===200?'neutral':'open',base+t,.3+.12*Math.min(t,1800)/1000);s.experience.beforeFrame(base+t);}
+ assert.ok(Math.abs(s.counts().panDistance-.216)<1e-8);assert.equal(s.counts().selectedCount,0);assert.equal(s.counts().morphs,0);
+}));
