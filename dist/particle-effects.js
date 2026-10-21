@@ -1,5 +1,6 @@
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=21';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=21';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=22';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=22';
+import {decodeModel,modelRotation,rotateModel,modelProjection,posterLight} from './model-3d.js?v=22';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -38,7 +39,7 @@ export class MorphTimeline{
 }
 // Static interleaved GPU data. No star catalogue object is passed into this renderer.
 const particleTemplates=new Map();
-export function createParticleBuffer(points,flowCount=96000){
+export function createParticleBuffer(points,flowCount=96000,model3d=false){
  const count=points.length+flowCount;
  let template=particleTemplates.get(flowCount);
  if(!template||template.length<count*10){
@@ -50,16 +51,18 @@ export function createParticleBuffer(points,flowCount=96000){
  }
  const data=template.slice(0,count*10);
 
- const tint=(p,o)=>{data[o]=p.x;data[o+1]=p.y;data[o+2]=p.z;data[o+3]=Math.min(1,p.r/255*1.05+.035);data[o+4]=Math.min(1,p.g/255*1.02+.025);data[o+5]=Math.min(1,p.b/255*.94+.015);if(!(data[o+9]>.5&&data[o+8]>=.89)){data[o+6]=clamp01(.5+p.x*.9+(data[o+6]-.5)*.12);data[o+7]=clamp01(.5+p.y*.9+(data[o+7]-.5)*.08);}};
+ const tint=(p,o)=>{data[o]=p.x;data[o+1]=p.y;data[o+2]=p.z;data[o+3]=Math.min(1,p.r/255*1.05+.035);data[o+4]=Math.min(1,p.g/255*1.02+.025);data[o+5]=Math.min(1,p.b/255*.94+.015);if(!model3d&&!(data[o+9]>.5&&data[o+8]>=.89)){data[o+6]=clamp01(.5+p.x*.9+(data[o+6]-.5)*.12);data[o+7]=clamp01(.5+p.y*.9+(data[o+7]-.5)*.08);}};
  // Every gathering particle has a surface destination; the cloud is not a separate backdrop.
  if(points.length)for(let i=0;i<flowCount;i++){const o=i*10,p=points[(i*7919+13)%points.length];tint(p,o);data[o]+=(data[o+6]-.5)*.0014;data[o+1]+=(data[o+7]-.5)*.0014;}
  for(let i=0;i<points.length;i++)tint(points[i],(i+flowCount)*10);
 
- return {data,count:points.length+flowCount,flowCount};
+ if(model3d){const surface=new Float32Array(count*13);for(let i=0;i<count;i++){const p=points[i<flowCount?(i*7919+13)%points.length:i-flowCount],o=i*13;surface.set(data.subarray(i*10,i*10+10),o);surface.set([p.nx,p.ny,p.nz],o+10);}return {data:surface,count,flowCount,stride:13};}
+ return {data,count,flowCount,stride:10};
 }
 const FLOW_VERTEX=`
 precision highp float;
-attribute vec3 aTarget,aColor,aSeed;attribute float aFlow;
+attribute vec3 aTarget,aColor,aSeed,aNormal;attribute float aFlow;
+uniform mat3 uRotation;uniform float uModel3D;
 uniform vec2 uViewport,uPointer,uOrigin;uniform vec3 uLayout;
 uniform vec2 uSource0,uSource1,uSource2,uSource3,uSource4;uniform float uSourceCount;
 uniform float uTime,uAmount,uFormation,uRelease,uDpr,uReduced;
@@ -80,11 +83,12 @@ void main(){
  float motion=mix(1.,.18,uReduced),loose=aFlow*step(.89,aSeed.z);
  float settle=cloudSettle(aSeed,uFormation);
  float breath=1.+sin(uTime*1.22)*.007*motion;
- vec3 target=aTarget;target.xy*=breath;
- target.xy+=target.z*uPointer*vec2(.055,.025)*motion;
+ vec3 target=mix(aTarget,uRotation*aTarget,uModel3D);target*=breath;
+ target.xy+=target.z*uPointer*vec2(.055,.025)*motion*(1.-uModel3D);
+ vec3 normal=uRotation*aNormal;
  vec3 p=cloudPose(target,aSeed,uTime,uFormation,uRelease,loose,motion);
  float zoom=mix(1.75,1.,smoothstep(.12,.95,uFormation));
- float perspective=1./(1.+p.z*.32*(1.-settle));
+ float perspective=1./(1.+p.z*mix(.32*(1.-settle),.85,uModel3D));
  vec2 pos=uLayout.xy+p.xy*uLayout.z*zoom*perspective;
  pos+=uPointer*vec2(46.,16.)*settle*(1.-uRelease)*motion;
  float sourceIndex=floor(fract(aSeed.z*17.31+aSeed.x*7.17)*max(1.,uSourceCount));
@@ -99,26 +103,35 @@ void main(){
  float visibility=flight.z*(1.-smoothstep(.65,1.,uRelease));
  float layer=mix(1.,.76,aFlow);
  float alpha=mix(.72,.86,settle)*layer;
- alpha=mix(alpha,mix(.34,.065,settle),loose);
+ alpha=mix(alpha,mix(.34,.13,settle),loose);
  vAlpha=alpha*visibility*glint;
  float shade=.62+.38*(.5+.5*sin(p.z*9.+aSeed.y*3.));
- vec3 gold=mix(vec3(.48,.29,.12),vec3(.96,.83,.58),shade);
- vColor=mix(gold,aColor,settle*(1.-loose)*.86)*glint;
- float size=mix(2.1,1.9,settle)*uDpr*perspective;
+ vec3 jade=mix(vec3(.08,.50,.54),vec3(.64,.92,.86),aSeed.x);
+ vec3 ice=mix(vec3(.37,.49,.82),vec3(.81,.90,1.),aSeed.y);
+ vec3 dust=mix(jade,ice,smoothstep(.65,.94,aSeed.z));
+ dust=mix(dust,vec3(.95,.90,.67),step(.93,aSeed.x)*.65);
+ vec3 surface=mix(dust,aColor,mix(.36,1.,uModel3D));
+ float diffuse=max(0.,dot(normal,normalize(vec3(-.35,-.48,-.8))));
+ float rim=pow(1.-abs(normal.z),2.);
+ surface=mix(surface,surface*(.22+diffuse*1.15)+vec3(.40,.83,.86)*rim*.18,uModel3D);
+ vColor=mix(dust,surface,settle*(1.-loose))*glint;
+ vAlpha*=mix(1.,.24+.76*smoothstep(-.3,.55,-normal.z),uModel3D*settle*(1.-loose));
+ vAlpha*=mix(1.,1.35,uModel3D);
+ float size=mix(mix(1.7,1.5,settle),mix(2.1,2.2,settle),uModel3D)*uDpr*perspective;
  size*=mix(.70,1.3,aSeed.z);
  float spark=fract(sin(dot(aSeed.xy,vec2(127.1,311.7)))*43758.5453);
  vSpark=loose>.5?step(.9985,spark):2.*step(.998,spark);
- if(vSpark>1.5){size=(3.+sweep*6.)*uDpr;vAlpha*=.35+sweep*.65;vColor=mix(vColor,vec3(1.,.90,.66),.5);}
- else if(vSpark>.5){size=(4.+aSeed.y*3.)*uDpr;vAlpha=.62*visibility;}
- gl_Position=vec4(pos.x/uViewport.x*2.-1.,1.-pos.y/uViewport.y*2.,0.,1.);
+ if(vSpark>1.5){size=(3.+sweep*6.)*uDpr;vAlpha*=.35+sweep*.65;vColor=mix(vColor,vec3(.88,1.,.94),.5);}
+ else if(vSpark>.5){size=(2.7+aSeed.y*1.2)*uDpr;vAlpha=.62*visibility;}
+ gl_Position=vec4(pos.x/uViewport.x*2.-1.,1.-pos.y/uViewport.y*2.,clamp(p.z*.65,-.95,.95)*uModel3D,1.);
  gl_PointSize=max(1.,size);
 }`;
 const FLOW_FRAGMENT=`
 precision mediump float;varying vec3 vColor;varying float vAlpha,vSpark;
-void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;if(vSpark>1.5){float light=exp(-r*r*5.)*.32+exp(-abs(q.x)*45.-abs(q.y)*6.)+exp(-abs(q.y)*45.-abs(q.x)*6.);gl_FragColor=vec4(vColor,vAlpha*min(1.,light));return;}if(vSpark>.5){if(q.y<abs(q.x)*1.6-.48||q.y>.36)discard;gl_FragColor=vec4(vec3(1.,.83,.40)*(.65+q.x*.6+q.y*.4),vAlpha);return;}if(r>1.)discard;float core=exp(-r*r*6.5),halo=exp(-r*r*2.8)*.24;gl_FragColor=vec4(vColor*(1.+core*.26),vAlpha*(core+halo));}
+void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;if(vSpark>1.5){float light=exp(-r*r*5.)*.32+exp(-abs(q.x)*45.-abs(q.y)*6.)+exp(-abs(q.y)*45.-abs(q.x)*6.);gl_FragColor=vec4(vColor,vAlpha*min(1.,light));return;}if(vAlpha<.008||r>1.)discard;if(vSpark>.5){gl_FragColor=vec4(mix(vColor,vec3(.90,1.,.94),.35),vAlpha*exp(-r*r*4.));return;}float core=exp(-r*r*6.5),halo=exp(-r*r*2.8)*.24;gl_FragColor=vec4(vColor*(1.+core*.26),vAlpha*(core+halo));}
 `;
 export class StatueStage{
- constructor(){this.timeline=new MorphTimeline();this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.sources=[];this.ripples=[];this.lastRipple=-Infinity;this.quality=1;this.frameMs=0;this.lastDraw=0;this.renderer='uninitialized';this.intervals=[];this.cadence={};this.opacity=0;this.prepared=new Map();}
+ constructor(){this.timeline=new MorphTimeline();this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.sources=[];this.ripples=[];this.lastRipple=-Infinity;this.quality=1;this.frameMs=0;this.lastDraw=0;this.renderer='uninitialized';this.intervals=[];this.cadence={};this.opacity=0;this.prepared=new Map();this.rotation=modelRotation(0);this.rotationOffset={yaw:0,pitch:0};}
  get busy(){return this.timeline.busy;}
  // Reuse the last sky frame as a dimmed backdrop; transparent particles keep moving above it.
  get occludesSky(){return this.busy&&this.opacity>.01;}
@@ -128,13 +141,13 @@ export class StatueStage{
   this.canvas=document.createElement('canvas');this.canvas.id='statue-particles';this.canvas.setAttribute('aria-hidden','true');this.canvas.hidden=true;document.body.append(this.canvas);
   if(new URLSearchParams(location.search).has('canvas-fallback'))return this.initFallback();
   try{
-   const gl=this.canvas.getContext('webgl',{alpha:true,antialias:false,depth:false,stencil:false,premultipliedAlpha:true,preserveDrawingBuffer:false,powerPreference:'high-performance'});if(!gl)throw new Error('WebGL unavailable');
+   const gl=this.canvas.getContext('webgl',{alpha:true,antialias:false,depth:true,stencil:false,premultipliedAlpha:true,preserveDrawingBuffer:false,powerPreference:'high-performance'});if(!gl)throw new Error('WebGL unavailable');
    this.gl=gl;
    const shader=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;};
    const vs=shader(gl.VERTEX_SHADER,FLOW_VERTEX),fs=shader(gl.FRAGMENT_SHADER,FLOW_FRAGMENT),program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));gl.deleteShader(vs);gl.deleteShader(fs);
-   this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2','uRipple3','uRipple4','uRippleSpread','uRippleSpreadTail','uSource0','uSource1','uSource2','uSource3','uSource4','uSourceCount'])this.uniforms[n]=gl.getUniformLocation(program,n);
+   this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uRotation','uModel3D','uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2','uRipple3','uRipple4','uRippleSpread','uRippleSpreadTail','uSource0','uSource1','uSource2','uSource3','uSource4','uSourceCount'])this.uniforms[n]=gl.getUniformLocation(program,n);
    gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
-   for(const [name,size,offset]of [['aTarget',3,0],['aColor',3,12],['aSeed',3,24],['aFlow',1,36]]){const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,40,offset);}
+   this.attributes=Object.fromEntries(['aTarget','aColor','aSeed','aFlow','aNormal'].map(name=>[name,gl.getAttribLocation(program,name)]));
    gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.clearColor(0,0,0,0);this.renderer='webgl';
    this.canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();this.error='WebGL context lost; Canvas fallback';this.initFallback();if(this.points)this.prepareFallback();});
   }catch(error){this.error=error.message;this.initFallback();}
@@ -145,24 +158,27 @@ export class StatueStage{
  }
  prepare(item){
   if(this.prepared.has(item.id))return this.prepared.get(item.id);
-  const points=decodeCloud(item),packed=createParticleBuffer(points);
-  const bounds={minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity};for(const p of points){bounds.minX=Math.min(bounds.minX,p.x);bounds.maxX=Math.max(bounds.maxX,p.x);bounds.minY=Math.min(bounds.minY,p.y);bounds.maxY=Math.max(bounds.maxY,p.y);}
+  const points=item.kind==='mesh3d'?decodeModel(item):decodeCloud(item),packed=createParticleBuffer(points,item.kind==='mesh3d'?24000:96000,item.kind==='mesh3d');
+  const bounds={minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity,minZ:Infinity,maxZ:-Infinity};for(const p of points){bounds.minX=Math.min(bounds.minX,p.x);bounds.maxX=Math.max(bounds.maxX,p.x);bounds.minY=Math.min(bounds.minY,p.y);bounds.maxY=Math.max(bounds.maxY,p.y);bounds.minZ=Math.min(bounds.minZ,p.z);bounds.maxZ=Math.max(bounds.maxZ,p.z);}
   const entry={points,packed,bounds};this.prepared.set(item.id,entry);
   if(this.prepared.size>2)this.prepared.delete(this.prepared.keys().next().value);
   return entry;
  }
  start(item,now,sources=[]){
   if(this.busy||now<this.timeline.cooldownUntil)return false;
-  this.initRenderer();this.item=item;const prepared=this.prepare(item);this.points=prepared.points;this.bounds=prepared.bounds;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.handRippleCount=0;this.fingerRippleCount=Object.fromEntries(Object.keys(FINGER_TIPS).map(f=>[f,0]));this.fingerCooldowns={};this.lastPointerRipple=-Infinity;this.pointerRippleCount=0;this.lastRippleSource='';this.lastRippleFinger=null;this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
+  this.initRenderer();this.item=item;this.model3d=item.kind==='mesh3d';this.projectedBounds=null;this.rotationOffset={yaw:0,pitch:0};this.rotationDrag=null;const prepared=this.prepare(item);this.points=prepared.points;this.bounds=prepared.bounds;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.handRippleCount=0;this.fingerRippleCount=Object.fromEntries(Object.keys(FINGER_TIPS).map(f=>[f,0]));this.fingerCooldowns={};this.lastPointerRipple=-Infinity;this.pointerRippleCount=0;this.lastRippleSource='';this.lastRippleFinger=null;this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
   const packed=prepared.packed;this.particleCount=packed.count;
-  if(this.gl){this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.buffer);this.gl.bufferData(this.gl.ARRAY_BUFFER,packed.data,this.gl.STATIC_DRAW);}else this.prepareFallback();
+  if(this.gl){const gl=this.gl;gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferData(gl.ARRAY_BUFFER,packed.data,gl.STATIC_DRAW);for(const [name,size,offset]of [['aTarget',3,0],['aColor',3,12],['aSeed',3,24],['aFlow',1,36]]){const loc=this.attributes[name];gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,packed.stride*4,offset);}const loc=this.attributes.aNormal;if(this.model3d){gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,3,gl.FLOAT,false,52,40);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);}else{gl.disableVertexAttribArray(loc);gl.vertexAttrib3f(loc,0,0,-1);gl.disable(gl.DEPTH_TEST);}}else this.prepareFallback();
   // Decode/upload before starting the clock so the first frame never skips ahead.
-  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect','star-flight-cloud');this.canvas.setAttribute('data-source-count',String(this.sources.length));this.canvas.setAttribute('data-hand-ripples','0');this.canvas.setAttribute('data-last-ripple-source','');for(const f of Object.keys(FINGER_TIPS))this.canvas.setAttribute('data-'+f+'-ripples','0');this.canvas.setAttribute('data-last-ripple-finger','');return true;
+  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect',this.model3d?'stl-3d-poster':'star-flight-cloud');this.canvas.setAttribute('data-model-kind',this.model3d?'mesh3d':'image2.5d');this.canvas.setAttribute('data-source-count',String(this.sources.length));this.canvas.setAttribute('data-hand-ripples','0');this.canvas.setAttribute('data-last-ripple-source','');for(const f of Object.keys(FINGER_TIPS))this.canvas.setAttribute('data-'+f+'-ripples','0');this.canvas.setAttribute('data-last-ripple-finger','');return true;
  }
- finish(now){this.timeline.finish(now);}
+ finish(now){this.rotationDrag=null;this.timeline.finish(now);}
+ beginRotation(x,y){if(!this.model3d||!this.busy)return false;this.rotationDrag={x,y};return true;}
+ dragRotation(x,y){if(!this.rotationDrag)return;const p=this.rotationDrag;this.rotationOffset.yaw+=(x-p.x)*Math.PI*2.4;this.rotationOffset.pitch=Math.max(-.85,Math.min(.85,this.rotationOffset.pitch+(y-p.y)*2));this.rotationDrag={x,y};}
+ endRotation(){this.rotationDrag=null;}
  handPoint(x,y){
   const l=this.currentLayout;if(!l)return {x:clamp01(x),y:clamp01(y)};
-  const b=this.bounds||{minX:-.32,maxX:.32,minY:-.48,maxY:.48};
+  const b=(this.model3d&&this.projectedBounds)||this.bounds||{minX:-.32,maxX:.32,minY:-.48,maxY:.48};
   const gainX=Math.min(4.5,l.width/Math.max(1,(b.maxX-b.minX)*l.size)*1.4),gainY=Math.min(2.4,l.height/Math.max(1,(b.maxY-b.minY)*l.size)*1.4);
   const u=.10+.80*clamp01(.5+(x-.5)*gainX),v=.10+.80*clamp01(.5+(y-.5)*gainY);
   return {x:clamp01((l.cx+(b.minX+(b.maxX-b.minX)*u)*l.size+this.pointer.x*46)/l.width),y:clamp01((l.cy+(b.minY+(b.maxY-b.minY)*v)*l.size+this.pointer.y*16)/l.height)};
@@ -192,15 +208,16 @@ export class StatueStage{
  prepareFallback(){
   this.body=document.createElement('canvas');this.body.width=700;this.body.height=700;const c=this.body.getContext('2d');
   for(const p of this.points){c.fillStyle=`rgb(${Math.min(255,p.r*1.05+9)},${Math.min(255,p.g*1.02+6)},${Math.min(255,p.b*.94+4)})`;c.globalAlpha=.82;c.fillRect((p.x+.5)*700,(p.y+.5)*700,.9,.9);}
-  const packed=this.prepare(this.item).packed,data=packed.data,count=Math.min(12000,packed.count);
+  const packed=this.prepare(this.item).packed,data=packed.data,stride=packed.stride,count=Math.min(this.model3d?8000:12000,packed.count);
   this.fallbackGroups=Array.from({length:12},()=>[]);
-  for(let i=0;i<count;i++){const index=Math.floor(i*packed.count/count),o=index*10,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
-   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:data[o+9]>.5&&seed.z>=.89});
+  for(let i=0;i<count;i++){const index=Math.floor(i*packed.count/count),o=index*stride,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
+   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,color:{r:data[o+3],g:data[o+4],b:data[o+5]},normal:{x:data[o+10]??0,y:data[o+11]??0,z:data[o+12]??-1},loose:data[o+9]>.5&&seed.z>=.89});
   }
-  this.fallbackPose={};this.fallbackSurface={};this.fallbackFlight={};this.fallbackScreen={};this.fallbackDisplacement={};this.fallbackPalette=Array.from({length:12},(_,i)=>`rgb(${138+i*9},${102+i*9},${56+i*8})`);
+  this.fallbackDraw=this.fallbackGroups.flat().map(particle=>({particle,target:{},pose:{},normal:{},screen:{},flight:{},displacement:{}}));this.fallbackPose={};this.fallbackSurface={};this.fallbackFlight={};this.fallbackScreen={};this.fallbackDisplacement={};this.fallbackPalette=Array.from({length:12},(_,i)=>`rgb(${65+i*11},${146+i*8},${163+i*7})`);
   this.haloSprite=document.createElement('canvas');this.haloSprite.width=this.haloSprite.height=24;const hc=this.haloSprite.getContext('2d'),halo=hc.createRadialGradient(12,12,0,12,12,12);halo.addColorStop(0,'#fff6ce');halo.addColorStop(.12,'#ffdf9bba');halo.addColorStop(.4,'#d8af6030');halo.addColorStop(1,'#d8af6000');hc.fillStyle=halo;hc.fillRect(0,0,24,24);this.glints=this.points.filter((_,i)=>i%1403===0);
  }
  drawFallback(l,now,sample,reduced){
+  if(this.model3d)return this.drawModelFallback(l,now,sample,reduced);
   const c=this.context;c.clearRect(0,0,l.width,l.height);
   const time=(now-this.animationStarted)/1000,motion=reduced?.18:1,solid=smooth((sample.formation-.62)/.38)*(1-sample.release);
   const sources=this.sources.length?this.sources.map(s=>({x:s.x*l.width,y:s.y*l.height})):[this.origin];
@@ -226,15 +243,35 @@ export class StatueStage{
   c.globalAlpha=solid*(1-disturbed);c.drawImage(this.body,l.cx-size/2+this.pointer.x*46*motion,l.cy-size/2+this.pointer.y*16*motion,size,size);c.globalAlpha=1;
   if(this.haloSprite)for(const point of this.glints){const sweep=Math.pow(Math.max(0,Math.sin(point.y*14-time*2.3+point.x*2.5)),20),q=statueSurface(point,time,this.pointer,motion,this.fallbackSurface);c.globalAlpha=solid*(.04+sweep*.45)*(1-disturbed);const x=l.cx+q.x*l.size+this.pointer.x*46*motion,y=l.cy+q.y*l.size+this.pointer.y*16*motion;c.drawImage(this.haloSprite,x-8,y-8,16,16);}c.globalAlpha=1;
  }
+ drawModelFallback(l,now,sample,reduced){
+  const c=this.context;c.clearRect(0,0,l.width,l.height);
+  const time=(now-this.animationStarted)/1000,motion=reduced?.18:1,zoom=1.75-.75*smooth((sample.formation-.12)/.83),breath=1+Math.sin(time*1.22)*.007*motion;
+  const waves=prepareRippleWaves(this.ripples,now,l.width,l.height),fade=1-smooth((sample.release-.65)/.35),free=1-smooth(sample.release/.22),draw=this.fallbackDraw;
+  const sources=this.sources.map(s=>({x:s.x*l.width,y:s.y*l.height}));
+  for(const dot of draw){const particle=dot.particle;
+   const target=rotateModel(particle.target,this.rotation,dot.target);target.x*=breath;target.y*=breath;target.z*=breath;
+   const p=cloudPose(target,particle.seed,time,sample.formation,sample.release,particle.loose,motion,dot.pose),settle=cloudSettle(particle.seed,sample.formation),perspective=modelProjection(p);
+   let x=l.cx+p.x*l.size*zoom*perspective+this.pointer.x*46*settle*(1-sample.release)*motion,y=l.cy+p.y*l.size*zoom*perspective+this.pointer.y*16*settle*(1-sample.release)*motion,visibility=1;
+   if(time<2.5){const index=Math.floor(((particle.seed.z*17.31+particle.seed.x*7.17)%1)*Math.max(1,this.sources.length)),source=sources[index];dot.screen.x=x;dot.screen.y=y;const flight=starFlight(particle.seed,time,source||this.origin,dot.screen,Math.min(l.width,l.height),motion,dot.flight);x=flight.x;y=flight.y;visibility=flight.visibility;}
+   if(waves.length){const d=rippleDisplacement(x,y,waves,Math.min(l.width,l.height)*.07,dot.displacement);x+=d.x*free*motion;y+=d.y*free*motion;}
+   const normal=rotateModel(particle.normal,this.rotation,dot.normal),light=posterLight(normal),facing=.24+.76*smooth((-normal.z+.3)/.85),alpha=visibility*fade*(particle.loose?.12:.72*(1-settle+settle*facing));
+   const color=particle.color,brightness=1-settle+settle*light.brightness;
+   dot.x=x;dot.y=y;dot.z=p.z;dot.size=Math.max(.65,(1.1+particle.seed.z*.55)*perspective);dot.alpha=alpha;dot.r=Math.min(255,color.r*255*brightness+light.rim*18);dot.g=Math.min(255,color.g*255*brightness+light.rim*39);dot.b=Math.min(255,color.b*255*brightness+light.rim*40);
+  }
+  // Reduced surface count and painter ordering preserve actual rear/side geometry.
+  draw.sort((a,b)=>b.z-a.z);for(const p of draw){c.globalAlpha=p.alpha;c.fillStyle=`rgb(${Math.round(p.r)},${Math.round(p.g)},${Math.round(p.b)})`;c.fillRect(p.x,p.y,p.size,p.size);}c.globalAlpha=1;
+ }
  draw(ctx,now,width,height,anchor,reduced=false){
+  if(this.busy)now=Math.max(now,this.timeline.started);
   const started=performance.now(),frameDelta=Math.max(0,Math.min(60,now-this.lastDraw));if(this.busy&&this.lastDraw){const dt=now-this.lastDraw;if(dt>0){this.intervals.push(dt);if(this.intervals.length>180)this.intervals.shift();}}this.lastDraw=now;
   const sample=this.timeline.sample(now);
   sample.presence=cloudPresence(sample.formation||0)*(1-(sample.release||0));if(sample.done){this.ripples=[];if(this.canvas){this.canvas.setAttribute?.('data-active-ripples','0');this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
-  const phase=sample.release>0?'release':sample.formation<.08?'emerging':sample.formation<.3?'cloud':sample.formation<.9?'silhouette':'formed';if(this.phase!==phase){this.phase=phase;this.canvas.setAttribute?.('data-phase',phase);this.canvas.setAttribute?.('data-phase-time',String(Math.round((now-this.animationStarted)/10)/100));}const l=this.layout(width,height);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
+  const phase=sample.release>0?'release':sample.formation<.08?'emerging':sample.formation<.3?'cloud':sample.formation<.9?'silhouette':'formed';if(this.phase!==phase){this.phase=phase;this.canvas.setAttribute?.('data-phase',phase);this.canvas.setAttribute?.('data-phase-time',String(Math.round((now-this.animationStarted)/10)/100));}const l=this.layout(width,height);if(this.model3d)l.size*=.88;if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
   this.currentLayout=l;const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
   this.opacity=sample.presence;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
   this.ripples=this.ripples.filter(r=>now-r.time<(r.spread<1?1350:2500));this.canvas.setAttribute?.('data-active-ripples',String(this.ripples.length));this.canvas.setAttribute?.('data-hand-source-count',String(this.ripples.filter(r=>r.finger).length));
-  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);gl.uniform1f(u.uSourceCount,this.sources.length||1);for(let i=0;i<5;i++){const source=this.sources[i]||this.sources[0]||{x:this.origin.x/width,y:this.origin.y/height};gl.uniform2f(u['uSource'+i],source.x,source.y);}gl.uniform3f(u.uRippleSpread,this.ripples[0]?.spread||1,this.ripples[1]?.spread||1,this.ripples[2]?.spread||1);gl.uniform2f(u.uRippleSpreadTail,this.ripples[3]?.spread||1,this.ripples[4]?.spread||1);for(let i=0;i<5;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
+  const time=(now-this.animationStarted)/1000;this.yaw=(reduced?0:Math.max(0,time-2)*.28)+this.rotationOffset.yaw+this.pointer.x*.55;this.pitch=this.rotationOffset.pitch-this.pointer.y*.16;modelRotation(this.yaw,this.pitch,this.rotation);if(this.model3d&&this.bounds){const b=this.bounds,p=this.boundCorner||(this.boundCorner={}),q=this.boundProjection||(this.boundProjection={}),out=this.projectedBounds||(this.projectedBounds={});out.minX=out.minY=Infinity;out.maxX=out.maxY=-Infinity;for(const x of [b.minX,b.maxX])for(const y of [b.minY,b.maxY])for(const z of [b.minZ,b.maxZ]){p.x=x;p.y=y;p.z=z;rotateModel(p,this.rotation,q);const scale=modelProjection(q);out.minX=Math.min(out.minX,q.x*scale);out.maxX=Math.max(out.maxX,q.x*scale);out.minY=Math.min(out.minY,q.y*scale);out.maxY=Math.max(out.maxY,q.y*scale);}}if(this.model3d){this.canvas.setAttribute?.('data-yaw',this.yaw.toFixed(3));this.canvas.setAttribute?.('data-pitch',this.pitch.toFixed(3));}
+  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(this.program);gl.uniformMatrix3fv(u.uRotation,false,this.rotation);gl.uniform1f(u.uModel3D,this.model3d?1:0);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);gl.uniform1f(u.uSourceCount,this.sources.length||1);for(let i=0;i<5;i++){const source=this.sources[i]||this.sources[0]||{x:this.origin.x/width,y:this.origin.y/height};gl.uniform2f(u['uSource'+i],source.x,source.y);}gl.uniform3f(u.uRippleSpread,this.ripples[0]?.spread||1,this.ripples[1]?.spread||1,this.ripples[2]?.spread||1);gl.uniform2f(u.uRippleSpreadTail,this.ripples[3]?.spread||1,this.ripples[4]?.spread||1);for(let i=0;i<5;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
   else{this.context.setTransform(dpr,0,0,dpr,0,0);this.drawFallback(l,now,sample,reduced);}
   this.frameMs=performance.now()-started;
   if(this.intervals.length){const sorted=[...this.intervals].sort((a,b)=>a-b),mean=this.intervals.reduce((a,b)=>a+b)/this.intervals.length;this.cadence={fps:Math.round(1000/mean),p95Ms:Math.round(sorted[Math.floor(sorted.length*.95)]*10)/10,samples:sorted.length};}

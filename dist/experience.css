@@ -16,3 +16,5 @@ body.morphing .vignette{opacity:calc(1 - var(--stage-presence))}.stage-title{opa
 @media(prefers-reduced-motion:reduce){#sky{transform:none}.stage-title>p{text-shadow:none}}
 
 #stage-input-hint{color:#d8c58e;font-size:9px;white-space:nowrap;margin-left:auto;margin-right:10px}#stage-input-hint:empty{display:none}@media(max-width:850px){#stage-input-hint{font-size:8px;width:auto;margin:0 10px 0 0}}
+
+body.model-3d #sky{cursor:grab}body.model-3d:active #sky{cursor:grabbing}body.model-3d .stage-title>p{color:#d4f5e9;text-shadow:0 0 28px #75cfc827}body.model-3d .stage-title>small,body.model-3d #stage-input-hint{color:#a4dcd2}

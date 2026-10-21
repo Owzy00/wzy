@@ -5,9 +5,9 @@ const standalone=await readFile('dist/standalone.html','utf8');
 const script=standalone.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
 if(!script||script.includes('fetch(')||standalone.includes('<link rel="stylesheet"'))throw new Error('Standalone has external runtime dependencies');
 execFileSync(process.execPath,['--input-type=module','--check'],{input:script,stdio:['pipe','inherit','inherit']});
-const files=['index.html','motion-qa.html','hand-ripple-qa.html','navigation-qa.html','style.css','experience.css','app.js','astronomy.js','gesture-core.js','gesture-camera.js','hand-worker.js','cloud-field.js','particle-effects.js','experience.js','data/stars.json','data/supplement.json','data/mansions.json','data/statues.json','data/provenance.json','data/NOTICE.txt','vendor/mediapipe/vision_bundle.mjs','vendor/mediapipe/hand_landmarker.task'];
+const files=['index.html','motion-qa.html','hand-ripple-qa.html','navigation-qa.html','model-qa.html','style.css','experience.css','app.js','astronomy.js','gesture-core.js','gesture-camera.js','hand-worker.js','cloud-field.js','model-3d.js','particle-effects.js','experience.js','data/stars.json','data/supplement.json','data/mansions.json','data/statues.json','data/kang-3d.json','data/provenance.json','data/NOTICE.txt','vendor/mediapipe/vision_bundle.mjs','vendor/mediapipe/hand_landmarker.task'];
 for(const f of files)await stat('dist/'+f);
-for(const f of ['app.js','astronomy.js','gesture-core.js','gesture-camera.js','hand-worker.js','cloud-field.js','particle-effects.js','experience.js'])execFileSync(process.execPath,['--check','dist/'+f],{stdio:'inherit'});
+for(const f of ['app.js','astronomy.js','gesture-core.js','gesture-camera.js','hand-worker.js','cloud-field.js','model-3d.js','particle-effects.js','experience.js'])execFileSync(process.execPath,['--check','dist/'+f],{stdio:'inherit'});
 const stars=[...JSON.parse(await readFile('dist/data/stars.json','utf8')),...JSON.parse(await readFile('dist/data/supplement.json','utf8'))],ms=JSON.parse(await readFile('dist/data/mansions.json','utf8')),ids=new Set(stars.map(s=>s[0]));
 if(ms.length!==28||stars.length<5044)throw new Error('Incomplete catalogue');
 for(const m of ms)for(const id of m.lines.flat())if(!ids.has(id))throw new Error('Missing HIP '+id);
@@ -15,3 +15,5 @@ const statues=JSON.parse(await readFile('dist/data/statues.json','utf8'));if(sta
 for(const f of ['vision_wasm_module_internal.js','vision_wasm_module_internal.wasm'])await stat('dist/vendor/mediapipe/wasm/'+f);
 await stat('dist/vendor/mediapipe/LICENSE');
 console.log(`Build verified: ${files.length} core assets, ${stars.length} stars, 28 mansions and 28 statue clouds. MediaPipe optional; local model bundled.`);
+
+const model=JSON.parse(await readFile('dist/data/kang-3d.json','utf8'));const {decodeModel}=await import('../dist/model-3d.js');if(model.id!==1||model.name!=='亢'||model.count!==120000||decodeModel(model).length!==model.count)throw new Error('Invalid Kang 3D asset');console.log('Kang 3D verified: 120000 surface points, 24000 flow points, true normals and poster palette.');
