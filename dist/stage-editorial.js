@@ -1,6 +1,15 @@
-import {deltaAngle,formatRA,formatDec} from './astronomy.js?v=30';
+import {deltaAngle,formatRA,formatDec} from './astronomy.js?v=32';
 
 const stageGroups=['东方青龙','北方玄武','西方白虎','南方朱雀'];
+const qinglongNotes=[
+ '',
+ '双手交叠，龙身盘绕，发冠与衣褶在星尘中显现。',
+ '氐土貉执物而立，衣袍层叠，貉形依身相伴。',
+ '房日兔托珠怀兔，衣纹舒展，星尘描出柔和的彩塑轮廓。',
+ '心月狐举手而坐，长发与衣带舒展，狐形依身相伴。',
+ '尾火虎扬拳而立，发冠如焰，虎形伏于身侧。',
+ '箕水豹托莲而立，衣袍垂落，豹形自足边昂首相伴。'
+];
 const stageOrders=['一','二','三','四','五','六','七'];
 const stageNames=['角亢氐房心尾箕','斗牛女虚危室壁','奎娄胃昴毕觜参','井鬼柳星张翼轸'];
 const escapeStageText=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -19,8 +28,8 @@ export function stagePresentation(mansion,item){
  return {id,name,groupName,chapter,points,lines,sequence:[...(stageNames[group]||'')],active:id%7,
   coordinates:center?formatRA(center.ra)+' / '+formatDec(center.dec):'',
   title:item.title,pinyin:item.pinyin,
-  motif:id===0?'春生 · 东方 · 木 · 蛟':groupName+' · '+name+'宿',
-  note:id===0?'角为东方青龙七宿之首。执珠而起，象征春生与万物之始。':'由'+name+'宿的星子连线，寻访'+item.title+'的彩塑形象。',
+  motif:id===0?'春生 · 东方 · 木 · 蛟':id<7?'东方 · '+[...item.title].slice(1).join(' · '):groupName+' · '+name+'宿',
+  note:id===0?'角为东方青龙七宿之首。执珠而起，象征春生与万物之始。':qinglongNotes[id]||'由'+name+'宿的星子连线，寻访'+item.title+'的彩塑形象。',
   collection:'府城玉皇庙 · 二十八宿彩塑'};
 }
 

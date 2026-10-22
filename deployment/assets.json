@@ -304,5 +304,119 @@
       "deployment/assets/dist-data-jiao-poster-json/010.b64",
       "deployment/assets/dist-data-jiao-poster-json/011.b64"
     ]
+  },
+  {
+    "path": "dist/data/qinglong/01-kang.json",
+    "bytes": 1792568,
+    "sha256": "988ede66c338e47757edcbfaa47342cd5ad1dbbe2b50c32761c5c76911d451de",
+    "parts": [
+      "deployment/assets/dist-data-qinglong-01-kang-json/000.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/001.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/002.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/003.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/004.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/005.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/006.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/007.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/008.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/009.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/010.b64",
+      "deployment/assets/dist-data-qinglong-01-kang-json/011.b64"
+    ]
+  },
+  {
+    "path": "dist/data/qinglong/02-di.json",
+    "bytes": 1792563,
+    "sha256": "e6d34f903e25a691ebd68ed340369173773a27583973c815c4aa208b14aea4bf",
+    "parts": [
+      "deployment/assets/dist-data-qinglong-02-di-json/000.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/001.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/002.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/003.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/004.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/005.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/006.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/007.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/008.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/009.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/010.b64",
+      "deployment/assets/dist-data-qinglong-02-di-json/011.b64"
+    ]
+  },
+  {
+    "path": "dist/data/qinglong/03-fang.json",
+    "bytes": 1792565,
+    "sha256": "c3340825fb80b8633f6c6a3175945ad9d11c6bfb5739c165ba35405477797206",
+    "parts": [
+      "deployment/assets/dist-data-qinglong-03-fang-json/000.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/001.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/002.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/003.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/004.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/005.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/006.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/007.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/008.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/009.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/010.b64",
+      "deployment/assets/dist-data-qinglong-03-fang-json/011.b64"
+    ]
+  },
+  {
+    "path": "dist/data/qinglong/04-xin.json",
+    "bytes": 1792566,
+    "sha256": "55ec5c26f37e297365baca29dfaa1eb0a40312a9bb1065d971eb483af3710b46",
+    "parts": [
+      "deployment/assets/dist-data-qinglong-04-xin-json/000.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/001.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/002.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/003.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/004.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/005.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/006.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/007.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/008.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/009.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/010.b64",
+      "deployment/assets/dist-data-qinglong-04-xin-json/011.b64"
+    ]
+  },
+  {
+    "path": "dist/data/qinglong/05-wei.json",
+    "bytes": 1792583,
+    "sha256": "3ea3f7cb14bc5c2a93abb9f7e35598b72734c62bceba53bd9ecabdf2215a8ff7",
+    "parts": [
+      "deployment/assets/dist-data-qinglong-05-wei-json/000.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/001.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/002.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/003.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/004.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/005.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/006.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/007.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/008.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/009.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/010.b64",
+      "deployment/assets/dist-data-qinglong-05-wei-json/011.b64"
+    ]
+  },
+  {
+    "path": "dist/data/qinglong/06-ji.json",
+    "bytes": 1792565,
+    "sha256": "d2d987ce031288a549593e8c7419d63fa8d457f3058a44052d003bc49f52fc91",
+    "parts": [
+      "deployment/assets/dist-data-qinglong-06-ji-json/000.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/001.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/002.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/003.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/004.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/005.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/006.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/007.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/008.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/009.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/010.b64",
+      "deployment/assets/dist-data-qinglong-06-ji-json/011.b64"
+    ]
   }
 ]

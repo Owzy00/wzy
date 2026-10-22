@@ -38,3 +38,5 @@ dist/standalone.html
 /dist/vendor/mediapipe/wasm/vision_wasm_internal.wasm
 /dist/vendor/mediapipe/wasm/vision_wasm_module_internal.wasm
 /dist/vendor/mediapipe/wasm/vision_wasm_nosimd_internal.wasm
+
+/dist/data/qinglong/*.json

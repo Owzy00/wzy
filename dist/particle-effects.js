@@ -1,14 +1,15 @@
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=30';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=30';
-import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=30';
+import {isPosterStyle} from './qinglong-posters.js?v=32';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=32';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=32';
+import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=32';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
 export function decodeCloud(item){
  const binary=atob(item.data),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);if(bytes.length!==item.count*9)throw new Error('点云字节数不匹配');
  const v=new DataView(bytes.buffer),points=[];for(let i=0;i<item.count;i++){const o=i*9;points.push({x:v.getInt16(o,true)/1000,y:v.getInt16(o+2,true)/1000,z:v.getInt16(o+4,true)/1000,r:v.getUint8(o+6),g:v.getUint8(o+7),b:v.getUint8(o+8)});}
- if(item.style==='jiao-poster'&&item.edgeAlpha){const alpha=atob(item.edgeAlpha);if(alpha.length!==points.length)throw new Error('轮廓羽化数据不匹配');for(let i=0;i<points.length;i++)points[i].opacity=alpha.charCodeAt(i)/255;}
- if(item.style==='jiao-poster'&&item.weathering){const raw=atob(item.weathering.data);if(item.weathering.count!==points.length||raw.length!==points.length*4)throw new Error('边缘风化数据不匹配');const b=Uint8Array.from(raw,c=>c.charCodeAt(0)),v=new DataView(b.buffer);for(let i=0;i<points.length;i++){points[i].emitX=v.getInt16(i*4,true)/1000;points[i].emitY=v.getInt16(i*4+2,true)/1000;}}
+ if(isPosterStyle(item.style)&&item.edgeAlpha){const alpha=atob(item.edgeAlpha);if(alpha.length!==points.length)throw new Error('轮廓羽化数据不匹配');for(let i=0;i<points.length;i++)points[i].opacity=alpha.charCodeAt(i)/255;}
+ if(isPosterStyle(item.style)&&item.weathering){const raw=atob(item.weathering.data);if(item.weathering.count!==points.length||raw.length!==points.length*4)throw new Error('边缘风化数据不匹配');const b=Uint8Array.from(raw,c=>c.charCodeAt(0)),v=new DataView(b.buffer);for(let i=0;i<points.length;i++){points[i].emitX=v.getInt16(i*4,true)/1000;points[i].emitY=v.getInt16(i*4+2,true)/1000;}}
  return points;
 }
 export class WindField{
@@ -167,8 +168,8 @@ export class StatueStage{
   const replacement=document.createElement('canvas');replacement.id='statue-particles';replacement.setAttribute('aria-hidden','true');this.canvas.replaceWith(replacement);this.canvas=replacement;this.gl=null;this.context=replacement.getContext('2d');this.renderer='canvas2d';
  }
  prepare(item){
-  const key=item.style==='jiao-poster'?'jiao-poster':item.id;if(this.prepared.has(key))return this.prepared.get(key);
-  const points=decodeCloud(item),poster=item.style==='jiao-poster',packed=createParticleBuffer(points,poster?48000:96000,poster);
+  const key=item.style==='jiao-poster'?'jiao-poster':item.style==='qinglong-poster'?'qinglong-poster:'+item.id:item.id;if(this.prepared.has(key))return this.prepared.get(key);
+  const points=decodeCloud(item),poster=isPosterStyle(item.style),packed=createParticleBuffer(points,poster?48000:96000,poster);
   const bounds={minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity};for(const p of points){bounds.minX=Math.min(bounds.minX,p.x);bounds.maxX=Math.max(bounds.maxX,p.x);bounds.minY=Math.min(bounds.minY,p.y);bounds.maxY=Math.max(bounds.maxY,p.y);}
   const entry={points,packed,bounds};this.prepared.set(key,entry);
   if(this.prepared.size>2)this.prepared.delete(this.prepared.keys().next().value);
@@ -176,11 +177,11 @@ export class StatueStage{
  }
  start(item,now,sources=[]){
   if(this.busy||now<this.timeline.cooldownUntil)return false;
-  this.initRenderer();this.item=item;this.posterMode=item.style==='jiao-poster';const prepared=this.prepare(item);this.points=prepared.points;this.bounds=prepared.bounds;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.handRippleCount=0;this.fingerRippleCount=Object.fromEntries(Object.keys(FINGER_TIPS).map(f=>[f,0]));this.fingerCooldowns={};this.lastPointerRipple=-Infinity;this.pointerRippleCount=0;this.lastRippleSource='';this.lastRippleFinger=null;this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
+  this.initRenderer();this.item=item;this.posterMode=isPosterStyle(item.style);const prepared=this.prepare(item);this.points=prepared.points;this.bounds=prepared.bounds;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.handRippleCount=0;this.fingerRippleCount=Object.fromEntries(Object.keys(FINGER_TIPS).map(f=>[f,0]));this.fingerCooldowns={};this.lastPointerRipple=-Infinity;this.pointerRippleCount=0;this.lastRippleSource='';this.lastRippleFinger=null;this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
   const packed=prepared.packed;this.particleCount=packed.count;
   if(this.gl){const gl=this.gl;gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferData(gl.ARRAY_BUFFER,packed.data,gl.STATIC_DRAW);const loc=this.emissionLocation;if(packed.emission){this.emissionBuffer??=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.emissionBuffer);gl.bufferData(gl.ARRAY_BUFFER,packed.emission,gl.STATIC_DRAW);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,8,0);}else if(this.emissionBuffer){gl.disableVertexAttribArray(loc);gl.vertexAttrib2f(loc,0,0);}}else this.prepareFallback();
   // Decode/upload before starting the clock so the first frame never skips ahead.
-  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect',this.posterMode?'jiao-poster':'star-flight-cloud');this.canvas.setAttribute('data-source-count',String(this.sources.length));this.canvas.setAttribute('data-hand-ripples','0');this.canvas.setAttribute('data-last-ripple-source','');for(const f of Object.keys(FINGER_TIPS))this.canvas.setAttribute('data-'+f+'-ripples','0');this.canvas.setAttribute('data-last-ripple-finger','');return true;
+  this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect',this.posterMode?item.style:'star-flight-cloud');this.canvas.setAttribute('data-source-count',String(this.sources.length));this.canvas.setAttribute('data-hand-ripples','0');this.canvas.setAttribute('data-last-ripple-source','');for(const f of Object.keys(FINGER_TIPS))this.canvas.setAttribute('data-'+f+'-ripples','0');this.canvas.setAttribute('data-last-ripple-finger','');return true;
  }
  finish(now){this.timeline.finish(now);}
  handPoint(x,y){
