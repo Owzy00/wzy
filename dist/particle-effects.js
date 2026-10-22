@@ -1,7 +1,7 @@
-import {isPosterStyle} from './qinglong-posters.js?v=32';
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=32';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=32';
-import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=32';
+import {isPosterStyle,posterPalette} from './qinglong-posters.js?v=33';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=33';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=33';
+import {drawJiaoAtmosphere,jiaoOrbit,jiaoPresence,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=33';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -79,6 +79,7 @@ uniform float uTime,uAmount,uFormation,uRelease,uDpr,uReduced;uniform mediump fl
 uniform vec4 uRipple0,uRipple1,uRipple2,uRipple3,uRipple4;
 uniform vec3 uRippleSpread;
 uniform vec2 uRippleSpreadTail;
+uniform float uHeritage;uniform vec3 uPosterLow,uPosterHigh,uPosterAccent;
 varying vec3 vColor;varying float vAlpha,vSpark;
 ${CLOUD_GLSL}
 ${JIAO_FRINGE_GLSL}
@@ -122,6 +123,7 @@ void main(){
  vec3 gold=mix(vec3(.48,.29,.12),vec3(.96,.83,.58),shade);
  vColor=mix(gold,aColor,settle*(1.-loose)*.86)*glint;
  vec3 aurora=mix(vec3(.06,.48,.59),vec3(.32,.66,.94),aSeed.y);aurora=mix(aurora,vec3(.57,.42,.84),step(.82,aSeed.z)*.35);
+ vec3 regional=mix(uPosterLow,uPosterHigh,aSeed.y);regional=mix(regional,uPosterAccent,step(.82,aSeed.z)*.35);aurora=mix(aurora,regional,uHeritage);
  vColor=mix(vColor,mix(aurora,aColor,settle*(1.-loose))*glint*1.20,uPoster);
  vAlpha*=mix(1.,mix(.83,1.52,settle)*(1.+min(aFlow,0.)),uPoster);
  vAlpha*=mix(1.,(1.-fringeDistance)*.88,fringe*settle);
@@ -155,7 +157,7 @@ export class StatueStage{
    this.gl=gl;
    const shader=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;};
    const vs=shader(gl.VERTEX_SHADER,FLOW_VERTEX),fs=shader(gl.FRAGMENT_SHADER,FLOW_FRAGMENT),program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));gl.deleteShader(vs);gl.deleteShader(fs);
-   this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uPoster','uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2','uRipple3','uRipple4','uRippleSpread','uRippleSpreadTail','uSource0','uSource1','uSource2','uSource3','uSource4','uSourceCount'])this.uniforms[n]=gl.getUniformLocation(program,n);
+   this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uHeritage','uPosterLow','uPosterHigh','uPosterAccent','uPoster','uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2','uRipple3','uRipple4','uRippleSpread','uRippleSpreadTail','uSource0','uSource1','uSource2','uSource3','uSource4','uSourceCount'])this.uniforms[n]=gl.getUniformLocation(program,n);
    gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
    for(const [name,size,offset]of [['aTarget',3,0],['aColor',3,12],['aSeed',3,24],['aFlow',1,36]]){const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,40,offset);}
    this.emissionLocation=gl.getAttribLocation(program,'aEmission');gl.disableVertexAttribArray(this.emissionLocation);gl.vertexAttrib2f(this.emissionLocation,0,0);
@@ -168,7 +170,7 @@ export class StatueStage{
   const replacement=document.createElement('canvas');replacement.id='statue-particles';replacement.setAttribute('aria-hidden','true');this.canvas.replaceWith(replacement);this.canvas=replacement;this.gl=null;this.context=replacement.getContext('2d');this.renderer='canvas2d';
  }
  prepare(item){
-  const key=item.style==='jiao-poster'?'jiao-poster':item.style==='qinglong-poster'?'qinglong-poster:'+item.id:item.id;if(this.prepared.has(key))return this.prepared.get(key);
+  const key=item.style==='jiao-poster'?'jiao-poster':isPosterStyle(item.style)?item.style+':'+item.id:item.id;if(this.prepared.has(key))return this.prepared.get(key);
   const points=decodeCloud(item),poster=isPosterStyle(item.style),packed=createParticleBuffer(points,poster?48000:96000,poster);
   const bounds={minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity};for(const p of points){bounds.minX=Math.min(bounds.minX,p.x);bounds.maxX=Math.max(bounds.maxX,p.x);bounds.minY=Math.min(bounds.minY,p.y);bounds.maxY=Math.max(bounds.maxY,p.y);}
   const entry={points,packed,bounds};this.prepared.set(key,entry);
@@ -221,9 +223,10 @@ export class StatueStage{
   this.fallbackGroups=Array.from({length:12},()=>[]);
   for(const index of indices){const o=index*10,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
    const fringe=this.posterMode&&data[o+9]>=2,weather=this.posterMode&&Boolean(packed.emission[index*2]||packed.emission[index*2+1]);
-   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:!fringe&&data[o+9]>.5&&seed.z>=(this.posterMode?.84:.89),fringe,weather,emission:weather?{x:packed.emission[index*2],y:packed.emission[index*2+1]}:null,color:weather?`rgb(${Math.min(255,Math.round(data[o+3]*306))},${Math.min(255,Math.round(data[o+4]*306))},${Math.min(255,Math.round(data[o+5]*306))})`:null,opacity:this.posterMode?data[o+9]<0?1+data[o+9]:fringe?3-data[o+9]:1:1});
+   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:!fringe&&data[o+9]>.5&&seed.z>=(this.posterMode?.84:.89),fringe,weather,emission:weather?{x:packed.emission[index*2],y:packed.emission[index*2+1]}:null,color:weather||this.item?.style==='heritage-poster'?`rgb(${Math.min(255,Math.round(data[o+3]*306))},${Math.min(255,Math.round(data[o+4]*306))},${Math.min(255,Math.round(data[o+5]*306))})`:null,opacity:this.posterMode?data[o+9]<0?1+data[o+9]:fringe?3-data[o+9]:1:1});
   }
   this.fallbackPose={};this.fallbackSurface={};this.fallbackFlight={};this.fallbackScreen={};this.fallbackDisplacement={};this.fallbackPalette=Array.from({length:12},(_,i)=>this.posterMode?`rgb(${69+i*10},${150+i*7},${177+i*6})`:`rgb(${138+i*9},${102+i*9},${56+i*8})`);
+  const regional=posterPalette(this.item?.id);if(this.item?.style==='heritage-poster'&&regional)this.fallbackPalette=Array.from({length:12},(_,i)=>'rgb('+regional.low.map((v,j)=>Math.round((v+(regional.high[j]-v)*i/11)*255)).join(',')+')');
   this.haloSprite=document.createElement('canvas');this.haloSprite.width=this.haloSprite.height=24;const hc=this.haloSprite.getContext('2d'),halo=hc.createRadialGradient(12,12,0,12,12,12);halo.addColorStop(0,'#fff6ce');halo.addColorStop(.12,'#ffdf9bba');halo.addColorStop(.4,'#d8af6030');halo.addColorStop(1,'#d8af6000');hc.fillStyle=halo;hc.fillRect(0,0,24,24);this.glints=this.points.filter((p,i)=>i%1403===0&&!(this.posterMode&&(p.emitX||p.emitY)));
  }
  drawFallback(l,now,sample,reduced){
@@ -256,7 +259,7 @@ export class StatueStage{
  }
  drawPosterLines(l,now,sample,reduced){
   if(!this.posterCanvas){const c=document.createElement('canvas');c.id='jiao-orbits';c.setAttribute('aria-hidden','true');c.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2';this.canvas.before(c);this.posterCanvas=c;this.posterContext=c.getContext('2d');}
-  const c=this.posterCanvas,dpr=Math.min(devicePixelRatio||1,1.25);c.hidden=false;if(c.width!==Math.round(l.width*dpr)||c.height!==Math.round(l.height*dpr)){c.width=Math.round(l.width*dpr);c.height=Math.round(l.height*dpr);}this.posterContext.setTransform(dpr,0,0,dpr,0,0);drawJiaoAtmosphere(this.posterContext,l,(now-this.animationStarted)/1000,sample.formation,sample.release,this.pointer,reduced);
+  const c=this.posterCanvas,dpr=Math.min(devicePixelRatio||1,1.25);c.hidden=false;if(c.width!==Math.round(l.width*dpr)||c.height!==Math.round(l.height*dpr)){c.width=Math.round(l.width*dpr);c.height=Math.round(l.height*dpr);}this.posterContext.setTransform(dpr,0,0,dpr,0,0);if(this.item?.style==='heritage-poster')drawRegionalAtmosphere(this.posterContext,l,(now-this.animationStarted)/1000,sample.formation,sample.release,this.pointer,reduced,posterPalette(this.item.id));else drawJiaoAtmosphere(this.posterContext,l,(now-this.animationStarted)/1000,sample.formation,sample.release,this.pointer,reduced);
  }
  draw(ctx,now,width,height,anchor,reduced=false){
   const started=performance.now(),frameDelta=Math.max(0,Math.min(60,now-this.lastDraw));if(this.busy&&this.lastDraw){const dt=now-this.lastDraw;if(dt>0){this.intervals.push(dt);if(this.intervals.length>180)this.intervals.shift();}}this.lastDraw=now;
@@ -267,11 +270,20 @@ export class StatueStage{
   this.opacity=sample.presence;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
   if(this.posterMode)this.drawPosterLines(l,now,sample,reduced);else if(this.posterCanvas)this.posterCanvas.hidden=true;
   this.ripples=this.ripples.filter(r=>now-r.time<(r.spread<1?1350:2500));this.canvas.setAttribute?.('data-active-ripples',String(this.ripples.length));this.canvas.setAttribute?.('data-hand-source-count',String(this.ripples.filter(r=>r.finger).length));
-  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform1f(u.uPoster,this.posterMode?1:0);gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);gl.uniform1f(u.uSourceCount,this.sources.length||1);for(let i=0;i<5;i++){const source=this.sources[i]||this.sources[0]||{x:this.origin.x/width,y:this.origin.y/height};gl.uniform2f(u['uSource'+i],source.x,source.y);}gl.uniform3f(u.uRippleSpread,this.ripples[0]?.spread||1,this.ripples[1]?.spread||1,this.ripples[2]?.spread||1);gl.uniform2f(u.uRippleSpreadTail,this.ripples[3]?.spread||1,this.ripples[4]?.spread||1);for(let i=0;i<5;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
+  if(this.gl){const gl=this.gl,u=this.uniforms;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform1f(u.uPoster,this.posterMode?1:0);const regional=this.item?.style==='heritage-poster'?posterPalette(this.item.id):null;gl.uniform1f(u.uHeritage,regional?1:0);if(regional){gl.uniform3f(u.uPosterLow,...regional.low);gl.uniform3f(u.uPosterHigh,...regional.high);gl.uniform3f(u.uPosterAccent,...regional.accent);}gl.uniform2f(u.uViewport,width,height);gl.uniform2f(u.uPointer,this.pointer.x,this.pointer.y);gl.uniform2f(u.uOrigin,this.origin.x,this.origin.y);gl.uniform3f(u.uLayout,l.cx,l.cy,l.size);gl.uniform1f(u.uTime,(now-this.animationStarted)/1000);gl.uniform1f(u.uAmount,sample.presence);gl.uniform1f(u.uFormation,sample.formation);gl.uniform1f(u.uRelease,sample.release);gl.uniform1f(u.uDpr,dpr);gl.uniform1f(u.uReduced,reduced?1:0);gl.uniform1f(u.uSourceCount,this.sources.length||1);for(let i=0;i<5;i++){const source=this.sources[i]||this.sources[0]||{x:this.origin.x/width,y:this.origin.y/height};gl.uniform2f(u['uSource'+i],source.x,source.y);}gl.uniform3f(u.uRippleSpread,this.ripples[0]?.spread||1,this.ripples[1]?.spread||1,this.ripples[2]?.spread||1);gl.uniform2f(u.uRippleSpreadTail,this.ripples[3]?.spread||1,this.ripples[4]?.spread||1);for(let i=0;i<5;i++){const r=this.ripples[i];gl.uniform4f(u['uRipple'+i],r?.x||0,r?.y||0,r?(now-r.time)/1000:0,r?.strength||0);}gl.drawArrays(gl.POINTS,0,this.particleCount);}
   else{this.context.setTransform(dpr,0,0,dpr,0,0);this.drawFallback(l,now,sample,reduced);}
   this.frameMs=performance.now()-started;
   if(this.intervals.length){const sorted=[...this.intervals].sort((a,b)=>a-b),mean=this.intervals.reduce((a,b)=>a+b)/this.intervals.length;this.cadence={fps:Math.round(1000/mean),p95Ms:Math.round(sorted[Math.floor(sorted.length*.95)]*10)/10,samples:sorted.length};}
   this.frames=(this.frames||0)+1;if(this.frames%30===0){this.canvas.setAttribute?.('data-fps',String(this.cadence.fps||0));this.canvas.setAttribute?.('data-p95-ms',String(this.cadence.p95Ms||0));this.canvas.setAttribute?.('data-frame-ms',String(Math.round(this.frameMs*100)/100));}
   return sample;
  }
+}
+
+// Identical orbital geometry and timing to v30, with the current poster's colors.
+export function drawRegionalAtmosphere(c,l,time,formation,release,pointer,reduced,palette){
+ const presence=jiaoPresence(formation,release);c.clearRect(0,0,l.width,l.height);if(presence<.001)return;
+ const motion=reduced?.18:1,p={};c.save();c.translate(l.cx+pointer.x*46,l.cy+pointer.y*16);c.scale(l.size,l.size);
+ c.lineWidth=.00065;c.setLineDash([.0014,.004]);
+ for(let k=0;k<4;k++){c.strokeStyle=palette.orbits[k%2];c.globalAlpha=presence*(k%2?.22:.31);c.lineDashOffset=-time*.014*motion;c.beginPath();for(let i=0;i<=140;i++){jiaoOrbit(i/140,time,k,motion,p);if(i)c.lineTo(p.x,p.y);else c.moveTo(p.x,p.y);}c.stroke();}
+ c.restore();
 }

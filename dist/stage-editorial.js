@@ -1,4 +1,5 @@
-import {deltaAngle,formatRA,formatDec} from './astronomy.js?v=32';
+import {posterDefinition} from './qinglong-posters.js?v=33';
+import {deltaAngle,formatRA,formatDec} from './astronomy.js?v=33';
 
 const stageGroups=['东方青龙','北方玄武','西方白虎','南方朱雀'];
 const qinglongNotes=[
@@ -28,8 +29,8 @@ export function stagePresentation(mansion,item){
  return {id,name,groupName,chapter,points,lines,sequence:[...(stageNames[group]||'')],active:id%7,
   coordinates:center?formatRA(center.ra)+' / '+formatDec(center.dec):'',
   title:item.title,pinyin:item.pinyin,
-  motif:id===0?'春生 · 东方 · 木 · 蛟':id<7?'东方 · '+[...item.title].slice(1).join(' · '):groupName+' · '+name+'宿',
-  note:id===0?'角为东方青龙七宿之首。执珠而起，象征春生与万物之始。':qinglongNotes[id]||'由'+name+'宿的星子连线，寻访'+item.title+'的彩塑形象。',
+  motif:id===0?'春生 · 东方 · 木 · 蛟':['东方','北方','西方','南方'][group]+' · '+[...item.title].slice(1).join(' · '),
+  note:id===0?'角为东方青龙七宿之首。执珠而起，象征春生与万物之始。':posterDefinition(id)?.note||qinglongNotes[id]||'由'+name+'宿的星子连线，寻访'+item.title+'的彩塑形象。',
   collection:'府城玉皇庙 · 二十八宿彩塑'};
 }
 

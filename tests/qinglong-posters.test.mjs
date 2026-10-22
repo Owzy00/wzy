@@ -35,7 +35,7 @@ test('poster loader fetches lazily, deduplicates, caches two and retries failure
  assert.equal(calls.length,0);
  const [a,b]=await Promise.all([load(1),load(1)]);assert.equal(a,b);assert.equal(calls.length,1);
  await load(2);assert.equal(await load(1),a);await load(3);await load(2);assert.equal(calls.length,4);
- await assert.rejects(load(7),/没有海报/);
+ await assert.rejects(load(28),/没有海报/);
  let attempts=0;const retry=createPosterLoader(async()=>({ok:++attempts>1,json:async()=>({...QINGLONG_POSTERS[4],count:96000})}));
  await assert.rejects(retry(4),/请重试/);assert.equal((await retry(4)).id,4);assert.equal(attempts,2);
  const wrong=createPosterLoader(async()=>({ok:true,json:async()=>({...QINGLONG_POSTERS[5],count:96000})}));

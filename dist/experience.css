@@ -87,3 +87,8 @@ body .gesture-panel,body.morphing .gesture-panel{left:var(--camera-dock-left);ri
 @media(max-width:850px){.experience-actions{top:155px;bottom:auto;right:16px}.view-toolbar{bottom:calc(var(--camera-dock-bottom) + 162px)}.info-panel{bottom:340px;right:16px}}
 
 @media(min-width:851px){.coordinate-readout{left:calc(var(--camera-dock-left) + var(--camera-dock-width) + 20px);bottom:calc(var(--camera-dock-bottom) + 180px)}}
+
+/* Poster-specific colors; v30 sizing, positions and Azure Dragon colors stay intact. */
+body.heritage-poster .stage-title>p{color:var(--poster-ink);text-shadow:0 0 24px color-mix(in srgb,var(--poster-accent) 15%,transparent)}
+body.heritage-poster .stage-title>small,body.heritage-poster .stage-atlas-heading h2,body.heritage-poster .stage-record dd{color:var(--poster-ink)}
+body.heritage-poster .chart-star{fill:var(--poster-ink)}body.heritage-poster .chart-aura{fill:var(--poster-accent);opacity:.13}body.heritage-poster .chart-lines{stroke:var(--poster-accent)}body.heritage-poster .stage-sequence>.current{color:var(--poster-ink)}body.heritage-poster .stage-sequence>.current i{border-color:var(--poster-ink);background:var(--poster-ink);box-shadow:0 0 9px var(--poster-accent)}

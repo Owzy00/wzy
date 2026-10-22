@@ -40,3 +40,7 @@ dist/standalone.html
 /dist/vendor/mediapipe/wasm/vision_wasm_nosimd_internal.wasm
 
 /dist/data/qinglong/*.json
+
+/dist/data/xuanwu/*.json
+/dist/data/baihu/*.json
+/dist/data/zhuque/*.json

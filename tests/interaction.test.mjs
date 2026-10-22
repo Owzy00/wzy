@@ -1,3 +1,4 @@
+import {POSTER_DEFINITIONS,posterDefinition} from '../dist/qinglong-posters.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initExperience} from '../dist/experience.js';
@@ -7,7 +8,7 @@ import {handLandmarks,tipIds} from './hand-fixtures.mjs';
 
 // Exercise the real experience coordinator with camera callbacks and the real timeline.
 // The small DOM facade lets the test control visibility and permission errors without a camera.
-async function scene(run,{poster=null,selectedId=7}={}){
+async function scene(run,{poster=null,selectedId=15}={}){
  const names=['document','window','fetch','requestIdleCallback','cancelIdleCallback','innerWidth','innerHeight'],saved=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
  globalThis.innerWidth=1000;globalThis.innerHeight=800;
  const requests=[];const styles={},elements=new Map(),listeners={},classes=new Set(),idle=[];
@@ -15,12 +16,12 @@ async function scene(run,{poster=null,selectedId=7}={}){
  const main={inert:false},bottom={inert:false};
  globalThis.document={hidden:false,body:{style:{setProperty(key,value){styles[key]=value;}},insertAdjacentHTML(){},classList:{toggle(name,value){if(value)classes.add(name);else classes.delete(name);},add(name){classes.add(name);},remove(name){classes.delete(name);}}},getElementById:element,querySelector:selector=>selector==='main'?main:bottom,addEventListener:(name,callback)=>listeners[name]=callback};
  globalThis.window={addEventListener:(name,callback)=>listeners[name]=callback};
- globalThis.fetch=async url=>{requests.push(url);return {ok:true,json:async()=>(url.includes('jiao-poster')||url.includes('data/qinglong/'))?poster:({items:Array.from({length:28},(_,id)=>({id,name:poster&&id===poster.id?poster.name:'宿'+id,title:'彩塑'+id,pinyin:'test'}))})};};
+ globalThis.fetch=async url=>{requests.push(url);const spec=POSTER_DEFINITIONS.find(p=>p.url===url);return {ok:true,json:async()=>spec?(poster&&poster.id===spec.id?poster:{...spec,count:96000}):({items:Array.from({length:28},(_,id)=>({id,name:posterDefinition(id)?.name||'宿'+id,title:'彩塑'+id,pinyin:'test'}))})};};
  globalThis.requestIdleCallback=callback=>idle.push(callback);globalThis.cancelIdleCallback=()=>{};
  let cameraVideo;let callbacks,selected=selectedId,selectedCount=0,panDistance=0,morphs=0,starts=0,stops=0,restores=0,touches=0;
  const stage={timeline:new MorphTimeline(),get busy(){return this.timeline.busy;},get occludesSky(){return this.busy;},prepare(){},interact(...args){this.lastInteraction=args;(this.interactions??=[]).push(args);touches++;},interactFingers(inputs,now,palm){this.lastFingers=inputs;this.interact(palm.x,palm.y,now,Math.max(0,...inputs.map(p=>p.strength)),'hand');},start(item,now,sources){this.sources=sources;if(!this.timeline.start(now))return false;this.item=item;morphs++;return true;},draw(ctx,now){return this.timeline.sample(now);},finish(now){this.timeline.finish(now);},pointer:{}};
  const camera={running:false,inferenceMs:30,async start(){starts++;this.running=true;callbacks.onStatus('running','已接入');},stop(){stops++;this.running=false;callbacks.onStatus('off','已关闭');}};
- const adapter={stageDetails:()=>({id:selected,name:poster&&selected===poster.id?poster.name:'宿'+selected,group:Math.floor(selected/7),members:[{id:1,ra:1,dec:.1,mag:1},{id:2,ra:1.02,dec:.15,mag:2}],center:{ra:1.01,dec:.125},lines:[[1,2]]}),emissionSources:()=>[{x:.3,y:.4},{x:.5,y:.6}],selected:()=>({id:selected,name:poster&&selected===poster.id?poster.name:'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
+ const adapter={stageDetails:()=>({id:selected,name:posterDefinition(selected)?.name||'宿'+selected,group:Math.floor(selected/7),members:[{id:1,ra:1,dec:.1,mag:1},{id:2,ra:1.02,dec:.15,mag:2}],center:{ra:1.01,dec:.125},lines:[[1,2]]}),emissionSources:()=>[{x:.3,y:.4},{x:.5,y:.6}],selected:()=>({id:selected,name:posterDefinition(selected)?.name||'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
  try{
   const experience=initExperience(adapter,{cameraFactory:(video,c)=>{cameraVideo=video;callbacks=c;return camera;},stageFactory:()=>stage});
   await new Promise(resolve=>setImmediate(resolve));
@@ -35,7 +36,7 @@ test('one camera session supports navigation, fist selection, palm morph and aut
  assert.ok(s.counts().panDistance>.05);const moved=s.counts().panDistance;
  for(let t=550;t<=1100;t+=50){s.emit('fist',base+t);s.experience.beforeFrame(base+t);}
  assert.equal(s.counts().selectedCount,1);assert.equal(s.counts().morphs,0);assert.equal(s.counts().panDistance,moved);
- for(let t=1150;t<=1400;t+=50)s.emit('open',base+t);
+ for(let t=1150;t<=1400;t+=50)s.emit('open',base+t);await new Promise(resolve=>setImmediate(resolve));
  assert.equal(s.counts().morphs,1);assert.equal(s.experience.busy,true);s.experience.beforeFrame(base+1500);assert.equal(s.camera.suspended,false);assert.equal(s.counts().stops,0);
  assert.deepEqual(s.stage.sources,[{x:.3,y:.4},{x:.5,y:.6}]);const gatheringTouches=s.counts().touches;s.emit('open',base+1550,.53);s.emit('open',base+1600,.59);assert.ok(s.stage.interactions.slice(-3).every(args=>args[3]===0));assert.equal(s.counts().touches,gatheringTouches+2);assert.equal(s.counts().panDistance,moved);assert.equal(s.counts().selectedCount,1);
  const hold=s.stage.timeline.started+s.stage.timeline.duration.gather+700;s.experience.draw(null,hold,1000,800,null,false);s.experience.beforeFrame(hold+16);assert.equal(s.camera.suspended,false);assert.ok(Number(s.styles['--stage-sky-opacity'])>=.5);assert.equal(s.styles['--stage-scale'],'1');const touches=s.counts().touches;s.emit('open',hold+50);assert.equal(s.counts().touches,touches+1);assert.equal(s.counts().morphs,1);s.emit('open',hold+100,.55);s.emit('open',hold+150,.61);assert.ok(s.stage.interactions.slice(-3).every(args=>args[3]===0));assert.equal(s.stage.lastInteraction[3],0);s.listeners.pointermove({clientX:400,clientY:400,target:{id:'sky'}});s.listeners.pointermove({clientX:500,clientY:400,target:{id:'sky'}});assert.ok(s.stage.lastInteraction[3]>.18);assert.equal(s.counts().selectedCount,1);assert.equal(s.counts().morphs,1);
@@ -80,7 +81,7 @@ test('coordinator preserves a drag across brief uncertain poses instead of reanc
 
 test('Jiao loads its original poster asset and identifies its source in the existing stage UI',async()=>scene(async s=>{await s.element('morph-trigger').onclick();assert.equal(s.stage.item.style,'jiao-poster');assert.equal(s.stage.item.id,0);assert.match(s.element('stage-credit').innerHTML,/用户提供海报/);assert.equal(s.requests.filter(url=>url.includes('jiao-poster')).length,1);assert.equal(s.counts().starts,1);},{poster:{id:0,name:'角',title:'角木蛟',pinyin:'Jiao Mu Jiao',style:'jiao-poster',count:96000},selectedId:0}));
 
-test('the other twenty-one mansions retain the v21 image path without fetching Jiao or any 3D model',async()=>scene(async s=>{await s.element('morph-trigger').onclick();assert.equal(s.stage.item.id,7);assert.equal(s.stage.item.style,undefined);assert.ok(s.requests.every(url=>!url.includes('jiao-poster')&&!url.includes('kang-3d')));}));
+test('Lou uses the newly supplied poster without fetching Jiao or any 3D model',async()=>scene(async s=>{await s.element('morph-trigger').onclick();assert.equal(s.stage.item.id,15);assert.equal(s.stage.item.style,'heritage-poster');assert.ok(s.requests.every(url=>!url.includes('jiao-poster')&&!url.includes('kang-3d')));}));
 
 test('persistent live preview reuses the recognition video and exposes camera controls',async()=>scene(async s=>{
  assert.equal(s.cameraVideo,s.element('hand-video'));assert.equal(s.counts().starts,1);
@@ -101,7 +102,7 @@ test('persistent live preview reuses the recognition video and exposes camera co
 test('stage star diagram and editorial remain unchanged through hand and mouse particle interaction',async()=>scene(async s=>{
  await s.element('morph-trigger').onclick();
  const atlas=s.element('stage-atlas').innerHTML,record=s.element('stage-record').innerHTML;
- assert.match(atlas,/宿7宿固定星点连线/);assert.match(record,/J2000/);assert.equal(s.element('stage-index').textContent,'MANSION 08 / 28');
+ assert.match(atlas,/娄宿固定星点连线/);assert.match(record,/J2000/);assert.equal(s.element('stage-index').textContent,'MANSION 16 / 28');
  const time=s.stage.timeline.started;
  for(const t of [100,1000,3000,5600]){s.emit('open',time+t,.3+t*.00002);s.listeners.pointermove({clientX:300+t*.01,clientY:400,target:{id:'sky'}});s.experience.draw(null,time+t,1000,800,null,false);}
  assert.equal(s.element('stage-atlas').innerHTML,atlas);assert.equal(s.element('stage-record').innerHTML,record);assert.equal(s.counts().starts,1);
@@ -119,4 +120,16 @@ for(const [id,name,title,pinyin] of [[1,'亢','亢金龙','Kang Jin Long'],[2,'�
   s.listeners.pointermove({clientX:400,clientY:300,target:{id:'sky'}});s.experience.draw(null,now,1000,800,null,false);
   assert.equal(s.counts().morphs,1);assert.equal(s.counts().starts,1);assert.equal(s.counts().stops,0);
  },{poster:{id,name,title,pinyin,style:'qinglong-poster',count:96000},selectedId:id}));
+}
+
+for(const spec of POSTER_DEFINITIONS.filter(p=>p.id>=7)){
+ test(spec.title+' maps its own poster, fixed constellation and regional color through generation and hold',async()=>scene(async s=>{
+  await s.element('morph-trigger').onclick();
+  assert.equal(s.stage.item.id,spec.id);assert.equal(s.stage.item.title,spec.title);assert.equal(s.stage.item.style,'heritage-poster');
+  assert.ok(s.classes.has('heritage-poster'));assert.match(s.element('stage-credit').innerHTML,new RegExp(spec.title));
+  assert.match(s.element('stage-atlas').innerHTML,new RegExp(spec.name+'宿固定星点连线'));assert.equal(s.requests.filter(u=>u===spec.url).length,1);
+  const atlas=s.element('stage-atlas').innerHTML,time=s.stage.timeline.started;
+  for(const t of [100,5600]){s.experience.draw(null,time+t,1000,800,null,false);s.listeners.pointermove({clientX:440,clientY:350,target:{id:'sky'}});}
+  assert.equal(s.element('stage-atlas').innerHTML,atlas);assert.equal(s.counts().morphs,1);assert.equal(s.counts().starts,1);assert.equal(s.counts().stops,0);
+ },{selectedId:spec.id}));
 }
