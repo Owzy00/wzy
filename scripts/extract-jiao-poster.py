@@ -42,6 +42,47 @@ for y,x in zip(yy,xx):
  pz=round((soft_lum[y,x]-.38)*.075*1000)
  color=np.minimum(255,np.power(rgb[y,x]/255,.86)*255*1.05).astype(int)
  packed.extend(struct.pack('<hhhBBB',px,py,pz,*color))
-item={'id':0,'name':'角','title':'角木蛟','pinyin':'Jiao Mu Jiao','style':'jiao-poster','count':count,'aspect':width/height,'source':'user-jiao-poster.png','sourceSha256':hashlib.sha256(source.read_bytes()).hexdigest(),'sourceSize':[w,h],'crop':[left,top,width,height],'encoding':'base64-int16le-xyz-uint8-rgb/9bytes','depthNote':'Subtle image-based parallax, no 3D mesh.','data':base64.b64encode(packed).decode()}
+# Keep the original surface samples and facial detail. A separate feather
+# channel softens only the boundary; 36k of the existing flow budget become
+# contour-connected dust instead of duplicating dense surface points.
+edge=np.asarray(mask.filter(ImageFilter.GaussianBlur(12)),dtype=float)/255
+edge_alpha=.22+.78*np.clip((edge[yy,xx]-.43)/.49,0,1)**.75
+protected=(xx>w*.54)&(xx<w*.67)&(yy>h*.12)&(yy<h*.22)
+edge_alpha[protected]=1
+ey,ex=np.gradient(edge)
+by,bx=np.where((edge>.39)&(edge<.65)&(bright>.17))
+bweights=(bright[by,bx]**1.3+.08)*np.hypot(ex[by,bx],ey[by,bx])
+chosen_edge=rng.choice(len(by),25600,replace=True,p=bweights/bweights.sum())
+fringe=bytearray()
+for i in chosen_edge:
+ y,x=by[i],bx[i]
+ norm=max(1e-8,np.hypot(ex[y,x],ey[y,x]));nx,ny=-ex[y,x]/norm,-ey[y,x]/norm
+ distance=min(.15,.002+rng.exponential(.027))
+ if rng.random()<.22:distance=rng.uniform(.025,.16)
+ tangent=rng.normal(0,.007+distance*.23)+np.sin(y/93+x/127)*distance*.48
+ px=((x+.5-left)/height-width/height/2)+nx*distance-ny*tangent
+ py=((y+.5-top)/height-.5)+ny*distance+nx*tangent
+ pz=(soft_lum[y,x]-.38)*.075+rng.normal(0,.012+distance*.12)
+ color=np.minimum(255,np.power(rgb[y,x]/255,.86)*255*1.05).astype(int)
+ # Local colors survive in the near haze, farther dust becomes cyan/lilac.
+ tint=np.array([82,195,217]) if x>w*.55 else np.array([117,164,226])
+ color=np.clip(color*.65+tint*.35,0,255).astype(int)
+ opacity=round(255*.92*np.exp(-distance/.062)*rng.uniform(.65,1))
+ fringe.extend(struct.pack('<hhhBBBB',round(px*1000),round(py*1000),round(pz*1000),*color,opacity))
+# Fine branching wakes leave actual sleeve / dragon / pedestal edges. Their
+# curved density is intentionally uneven, with open gaps for the star field.
+wisps=[(443,415,-175,-75,72),(617,136,-80,-115,38),(903,490,110,85,-55),(810,894,150,65,63),(177,794,-110,-85,-36),(180,1210,-115,30,51),(527,1425,165,-50,-44),(925,326,64,-85,32)]
+for k,(ax,ay,dx,dy,bend) in enumerate(wisps):
+ ax,dx=ax*w/1024,dx*w/1024;ay,dy=ay*h/1536,dy*h/1536
+ length=np.hypot(dx,dy);nx,ny=-dy/length,dx/length
+ for j in range(1300):
+  t=rng.beta(.95,1.35);curl=np.sin(t*np.pi*1.7)*bend*t
+  spread=rng.normal(0,2+np.sin(t*np.pi)*11)*(1 if j%4 else 2)
+  x=ax+dx*t+nx*(curl+spread);y=ay+dy*t+ny*(curl+spread)
+  px=(x-left)/height-width/height/2;py=(y-top)/height-.5
+  color=np.array([92,209,218]) if k%3 else np.array([149,161,229]);color=np.clip(color*rng.uniform(.8,1.15),0,255).astype(int)
+  opacity=round(255*.64*(1-t)**.85*rng.uniform(.6,1))
+  fringe.extend(struct.pack('<hhhBBBB',round(px*1000),round(py*1000),round(rng.normal(0,18)),*color,opacity))
+item={'id':0,'name':'角','title':'角木蛟','pinyin':'Jiao Mu Jiao','style':'jiao-poster','count':count,'aspect':width/height,'source':'user-jiao-poster.png','sourceSha256':hashlib.sha256(source.read_bytes()).hexdigest(),'sourceSize':[w,h],'crop':[left,top,width,height],'encoding':'base64-int16le-xyz-uint8-rgb/9bytes','depthNote':'Subtle image-based parallax, no 3D mesh.','data':base64.b64encode(packed).decode(),'edgeAlpha':base64.b64encode(np.uint8(np.round(edge_alpha*255)).tobytes()).decode(),'fringe':{'count':36000,'encoding':'base64-int16le-xyz-uint8-rgba/10bytes','data':base64.b64encode(fringe).decode()}}
 Path(args.output).write_text(json.dumps(item,ensure_ascii=False,separators=(',',':')),encoding='utf8')
 print(json.dumps({k:item[k] for k in ['count','sourceSha256','sourceSize','crop']},ensure_ascii=False))

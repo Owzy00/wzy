@@ -1,4 +1,17 @@
 const jiaoSmooth=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
+// Only the feathered contour moves in this field; face and garment folds stay
+// intact. GPU and Canvas use the same bounded, slow local drift.
+export function jiaoFringePose(target,seed,time,distance,motion=1,out={}){
+ const a=(.0025+distance*.012)*motion;
+ out.x=target.x+a*(Math.sin(target.y*14+time*.48+seed.x*9)*.7+Math.sin(target.x*22-time*.35+seed.y*11)*.3);
+ out.y=target.y+a*.55*Math.cos(target.x*17+time*.39+seed.z*12);
+ out.z=target.z;return out;
+}
+export const JIAO_FRINGE_GLSL=`
+vec3 jiaoFringePose(vec3 target,vec3 seed,float time,float distance,float motion){
+ float a=(.0025+distance*.012)*motion;
+ return target+vec3(a*(sin(target.y*14.+time*.48+seed.x*9.)*.7+sin(target.x*22.-time*.35+seed.y*11.)*.3),a*.55*cos(target.x*17.+time*.39+seed.z*12.),0.);
+}`;
 export function jiaoPresence(formation,release=0){return jiaoSmooth((formation-.12)/.64)*(1-jiaoSmooth(release));}
 // Fine, changing astronomical lines behind this one poster figure. These never
 // alter the celestial catalogue, navigation, or another mansion's appearance.

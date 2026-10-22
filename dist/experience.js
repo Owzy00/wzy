@@ -1,7 +1,7 @@
-import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=23';
-import {GestureCamera} from './gesture-camera.js?v=23';
-import {cloudPresence} from './cloud-field.js?v=23';
-import {WindField,StatueStage} from './particle-effects.js?v=23';
+import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=24';
+import {GestureCamera} from './gesture-camera.js?v=24';
+import {cloudPresence} from './cloud-field.js?v=24';
+import {WindField,StatueStage} from './particle-effects.js?v=24';
 export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new GestureCamera(video,callbacks),stageFactory=()=>new StatueStage()}={}){
  const visualStyles=new Map();let candidateAt=-Infinity;
  const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator(),handParticles=new FingerParticleInput();

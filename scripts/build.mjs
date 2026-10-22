@@ -17,3 +17,4 @@ await stat('dist/vendor/mediapipe/LICENSE');
 console.log(`Build verified: ${files.length} core assets, ${stars.length} stars, 28 mansions and 28 statue clouds. MediaPipe optional; local model bundled.`);
 
 const poster=JSON.parse(await readFile('dist/data/jiao-poster.json','utf8'));if(poster.id!==0||poster.name!=='角'||poster.style!=='jiao-poster'||poster.count!==96000||Buffer.from(poster.data,'base64').length!==96000*9)throw new Error('Invalid Jiao poster asset');console.log('Jiao poster verified: 96000 surface targets + 48000 flow particles; v21 catalogue and other clouds preserved.');
+if(Buffer.from(poster.edgeAlpha||'','base64').length!==poster.count||poster.fringe?.count!==36000||Buffer.from(poster.fringe?.data||'','base64').length!==36000*10)throw new Error('Invalid Jiao feathering asset');console.log('Jiao contour verified: gradual surface feathering and 36000 peripheral targets within the existing 144000 particle budget.');
