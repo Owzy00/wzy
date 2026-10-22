@@ -1,20 +1,20 @@
-<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>星河化相 · 化形版式预览</title><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./experience.css?v=31">
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>星河化相 · 化形版式预览</title><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./experience.css?v=30">
 <style>body.qa-clean .qa-controls{display:none}.qa-controls{position:fixed;top:90px;left:50%;transform:translateX(-50%);z-index:20;display:flex;gap:12px;align-items:center;font:9px system-ui;color:#98afb8;background:#0a1015d9;padding:8px 14px;border:1px solid #88b8b433}.qa-controls button,.qa-controls select{font:9px system-ui;color:#c5e6e3;background:#0e1b21;border:1px solid #82bdba55;padding:5px}#sky{z-index:0}.qa-controls small{font-size:8px;opacity:.7}@media(max-width:850px){.qa-controls{top:82px;width:max-content;max-width:95vw;font-size:8px;gap:5px}.qa-controls small{display:none}.qa-controls select{width:80px}}</style>
 <canvas id="sky"></canvas><div class="vignette"></div><header class="topbar">
  <a class="brand" href="./" aria-label="星河化相首页"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="18"/><ellipse cx="24" cy="24" rx="9" ry="22" transform="rotate(38 24 24)"/><path d="M2 24h44M24 2v44"/><circle cx="24" cy="24" r="3" class="filled"/></svg><span class="brand-name">星河化相<small>基于手势交互的山西玉皇庙<br>二十八星宿彩塑可视化设计</small></span></a>
  <div class="project-title"><span class="tiny-rule"></span>四象 · 二十八宿</div>
  <nav class="top-actions" aria-label="辅助功能"><button id="help" class="text-button"><span>?</span> 操作指南</button><button id="fullscreen" class="icon-button" title="全屏" aria-label="进入全屏">⛶</button></nav>
 </header><main></main><footer class="bottom-panel"></footer>
-<div class="qa-controls"><small>版式预览 · 摄像头未开启</small><select id="qa-mansion" aria-label="预览星宿"></select><button id="qa-form">固定成形预览</button><button id="qa-sky">返回星空</button><button id="qa-smoke">模拟指尖烟流</button></div>
+<div class="qa-controls"><small>版式预览 · 摄像头未开启</small><select id="qa-mansion" aria-label="预览星宿"></select><button id="qa-form">固定成形预览</button><button id="qa-sky">返回星空</button></div>
 <script type="module">
-import {initExperience} from './experience.js?v=31';
-import {StatueStage} from './particle-effects.js?v=31';
-import {RAD,centerOf,projectSphere} from './astronomy.js?v=31';
+import {initExperience} from './experience.js?v=30';
+import {StatueStage} from './particle-effects.js?v=30';
+import {RAD,centerOf,projectSphere} from './astronomy.js?v=30';
 document.body.classList.toggle('qa-clean',new URLSearchParams(location.search).has('clean'));
 const [rows,extra,catalogue]=await Promise.all(['stars','supplement','mansions'].map(n=>fetch('./data/'+n+'.json').then(r=>r.json())));
 const stars=new Map([...rows,...extra].map(([id,ra,dec,mag])=>[id,{id,ra:ra*RAD,dec:dec*RAD,mag}]));
 const mansions=catalogue.map(m=>{const members=[...new Set(m.lines.flat())].map(id=>stars.get(id));return {...m,members,center:centerOf(members)};});
-let selected=0,held=false,stage,replaySmoke=new URLSearchParams(location.search).has('smoke'),lastSmoke=-Infinity,smokeIndex=0;const select=document.querySelector('#qa-mansion');
+let selected=0,held=false,stage;const select=document.querySelector('#qa-mansion');
 select.innerHTML=mansions.map(m=>'<option value="'+m.id+'">'+m.name+'宿</option>').join('');
 const experience=initExperience({selected:()=>mansions[selected],stageDetails:()=>mansions[selected],blocked:()=>false,reducedMotion:false,stopNavigation(){},notice(){},snapshot:()=>({}),restore(){},pan(){},nearest:()=>selected,mansionName:id=>mansions[id].name,emissionSources:()=>[{x:.46,y:.4},{x:.49,y:.53}]},{stageFactory:()=>stage=new StatueStage(),cameraFactory:(_video,cb)=>({running:false,async start(){cb.onStatus('off','版式预览不调用摄像头');},stop(){cb.onStatus('off','摄像头已关闭');}})});
 const sky=document.querySelector('#sky'),ctx=sky.getContext('2d');
@@ -22,8 +22,7 @@ function paintSky(){sky.width=innerWidth;sky.height=innerHeight;ctx.fillStyle='#
 paintSky();addEventListener('resize',paintSky);
 async function form(){if(stage.busy)return;held=true;await document.querySelector('#morph-trigger').onclick();if(stage.busy)stage.animationStarted=performance.now()-5600;}
 document.querySelector('#qa-form').onclick=form;document.querySelector('#qa-sky').onclick=()=>{held=false;stage.finish(performance.now());};
-document.querySelector('#qa-smoke').onclick=()=>{replaySmoke=!replaySmoke;document.querySelector('#qa-smoke').textContent=replaySmoke?'停止烟流回放':'模拟指尖烟流';};
 select.onchange=()=>{if(stage.busy){select.value=selected;return;}selected=Number(select.value);paintSky();};
-function frame(now){if(held&&stage.busy&&stage.timeline.state!=='RETURNING')stage.timeline.started=now-5600;experience.beforeFrame(now);if(replaySmoke&&stage.busy&&now-lastSmoke>1650){lastSmoke=now;const tips=[{x:.43,y:.35},{x:.57,y:.52},{x:.45,y:.66}];stage.interactFingers([{finger:'index',...tips[smokeIndex++%tips.length],strength:.9,motion:true}],now,{x:.5,y:.5});}experience.draw(null,now,innerWidth,innerHeight,null,false);requestAnimationFrame(frame);}requestAnimationFrame(frame);
+function frame(now){if(held&&stage.busy&&stage.timeline.state!=='RETURNING')stage.timeline.started=now-5600;experience.beforeFrame(now);experience.draw(null,now,innerWidth,innerHeight,null,false);requestAnimationFrame(frame);}requestAnimationFrame(frame);
 await form();
 </script></html>

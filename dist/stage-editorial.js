@@ -1,4 +1,4 @@
-import {deltaAngle,formatRA,formatDec} from './astronomy.js?v=31';
+import {deltaAngle,formatRA,formatDec} from './astronomy.js?v=30';
 
 const stageGroups=['东方青龙','北方玄武','西方白虎','南方朱雀'];
 const stageOrders=['一','二','三','四','五','六','七'];

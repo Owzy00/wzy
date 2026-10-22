@@ -1,6 +1,6 @@
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=31';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=31';
-import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL,prepareSmokeWaves,smokeDisplacement,JIAO_SMOKE_GLSL} from './jiao-style.js?v=31';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=30';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=30';
+import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=30';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -81,9 +81,7 @@ uniform vec2 uRippleSpreadTail;
 varying vec3 vColor;varying float vAlpha,vSpark;
 ${CLOUD_GLSL}
 ${JIAO_FRINGE_GLSL}
-${JIAO_SMOKE_GLSL}
 vec2 wake(vec2 p,vec4 ripple,float spread){
- if(uPoster>.5)return smokeWake(p,ripple,spread,uViewport,uTime);
  float hand=spread<1.?1.:0.,life=mix(2.5,1.35,hand);
  if(ripple.w<.001||ripple.z<=0.||ripple.z>=life)return vec2(0.);
  float dim=min(uViewport.x,uViewport.y),radius=ripple.z*dim*mix(.36,.18,hand);
@@ -98,7 +96,6 @@ void main(){
  float breath=1.+sin(uTime*1.22)*.007*motion;
  vec3 target=aTarget;target.xy*=breath;
  vec4 edgeDust=jiaoFringePose(target,aSeed,uTime,aEmission*breath,motion);
- float vapor=clamp(length(edgeDust.xy-target.xy)/.08,0.,1.)*weather;
  target=mix(target,edgeDust.xyz,weather);
  target.xy+=target.z*uPointer*vec2(.055,.025)*motion;
  vec3 p=cloudPose(target,aSeed,uTime,uFormation,uRelease,loose,motion);
@@ -120,7 +117,6 @@ void main(){
  float alpha=mix(.72,.86,settle)*layer;
  alpha=mix(alpha,mix(.34,mix(.065,.15,uPoster),settle),loose);
  vAlpha=alpha*visibility*glint;
- vAlpha*=mix(1.,1.-.24*clamp(length(disturbance)/(min(uViewport.x,uViewport.y)*.035),0.,1.),uPoster);
  float shade=.62+.38*(.5+.5*sin(p.z*9.+aSeed.y*3.));
  vec3 gold=mix(vec3(.48,.29,.12),vec3(.96,.83,.58),shade);
  vColor=mix(gold,aColor,settle*(1.-loose)*.86)*glint;
@@ -128,10 +124,10 @@ void main(){
  vColor=mix(vColor,mix(aurora,aColor,settle*(1.-loose))*glint*1.20,uPoster);
  vAlpha*=mix(1.,mix(.83,1.52,settle)*(1.+min(aFlow,0.)),uPoster);
  vAlpha*=mix(1.,(1.-fringeDistance)*.88,fringe*settle);
- vAlpha*=mix(1.,edgeDust.w,weather)*(1.-vapor*.22);
+ vAlpha*=mix(1.,edgeDust.w,weather);
  float size=mix(2.1,1.9,settle)*uDpr*perspective;
  size*=mix(.70,1.3,aSeed.z)*mix(1.,.92,uPoster);
- size*=mix(1.,.78,fringe)*(1.+vapor*.45);
+ size*=mix(1.,.78,fringe);
  float spark=fract(sin(dot(aSeed.xy,vec2(127.1,311.7)))*43758.5453);
  vSpark=loose>.5?step(.9985,spark):2.*step(.998,spark)*(1.-fringe);
  if(vSpark>1.5){size=(3.+sweep*6.)*uDpr;vAlpha*=.35+sweep*.65;vColor=mix(vColor,mix(vec3(1.,.90,.66),vec3(.79,.96,1.),uPoster),.5);}
@@ -235,22 +231,22 @@ export class StatueStage{
   const sources=this.sources.length?this.sources.map(s=>({x:s.x*l.width,y:s.y*l.height})):[this.origin];
   const zoom=1.75-.75*smooth((sample.formation-.12)/.83),p=this.fallbackPose,breath=1+Math.sin(time*1.22)*.007*motion;
   const target=this.fallbackSurface||(this.fallbackSurface={}),screen=this.fallbackScreen||(this.fallbackScreen={});
-  const waves=(this.posterMode?prepareSmokeWaves:prepareRippleWaves)(this.ripples,now,l.width,l.height,this.animationStarted),freeMotion=1-smooth(sample.release/.22),disturbed=rippleActivity(this.ripples,now)*freeMotion;
+  const waves=prepareRippleWaves(this.ripples,now,l.width,l.height),freeMotion=1-smooth(sample.release/.22),disturbed=rippleActivity(this.ripples,now)*freeMotion;
   for(let group=0;group<12;group++){
    c.fillStyle=this.fallbackPalette[group];
    for(const particle of this.fallbackGroups[group]){
     if(solid>.95&&!particle.loose&&!particle.weather&&disturbed<.005)continue;
     target.x=particle.target.x*breath+particle.target.z*this.pointer.x*.055*motion;target.y=particle.target.y*breath+particle.target.z*this.pointer.y*.025*motion;target.z=particle.target.z;
-    let dustAlpha=1,vapor=0;if(particle.weather){jiaoFringePose(target,particle.seed,time,particle.emission,motion,target);dustAlpha=target.alpha;vapor=Math.min(1,Math.hypot(target.x-particle.target.x*breath,target.y-particle.target.y*breath)/.08);}
+    let dustAlpha=1;if(particle.weather){jiaoFringePose(target,particle.seed,time,particle.emission,motion,target);dustAlpha=target.alpha;}
     if(sample.hold&&!particle.loose){p.x=target.x;p.y=target.y;p.z=target.z;}else cloudPose(target,particle.seed,time,sample.formation,sample.release,particle.loose,motion,p);
     const settled=cloudSettle(particle.seed,sample.formation),perspective=1/(1+p.z*.32*(1-settled));
     let x=l.cx+p.x*l.size*zoom*perspective+this.pointer.x*46*settled*(1-sample.release)*motion;
     let y=l.cy+p.y*l.size*zoom*perspective+this.pointer.y*16*settled*(1-sample.release)*motion;
     let visibility=1;if(time<2.5){const source=sources[Math.floor(((particle.seed.z*17.31+particle.seed.x*7.17)%1)*sources.length)];screen.x=x;screen.y=y;const flight=starFlight(particle.seed,time,source,screen,Math.min(l.width,l.height),motion,this.fallbackFlight);x=flight.x;y=flight.y;visibility=flight.visibility;}
-    let smokeFade=1;if(waves.length){const d=(this.posterMode?smokeDisplacement:rippleDisplacement)(x,y,waves,Math.min(l.width,l.height)*.07,this.fallbackDisplacement);x+=d.x*freeMotion*motion;y+=d.y*freeMotion*motion;if(this.posterMode)smokeFade=1-.24*Math.min(1,Math.hypot(d.x,d.y)/(Math.min(l.width,l.height)*.035));}
+    if(waves.length){const d=rippleDisplacement(x,y,waves,Math.min(l.width,l.height)*.07,this.fallbackDisplacement);x+=d.x*freeMotion*motion;y+=d.y*freeMotion*motion;}
     c.globalAlpha=visibility*(1-smooth((sample.release-.65)/.35))*(particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));
     if(this.posterMode){c.fillStyle=particle.color||this.fallbackPalette[group];c.globalAlpha=visibility*(1-smooth((sample.release-.65)/.35))*particle.opacity*(particle.weather?(particle.fringe?.60:.95)*dustAlpha:particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));}
-    c.globalAlpha*=smokeFade*(1-vapor*.22);const size=(.75+particle.seed.z*.55)*perspective*(1+disturbed*.55)*(1+vapor*.45);c.fillRect(x,y,size,size);
+    const size=(.75+particle.seed.z*.55)*perspective*(1+disturbed*.55);c.fillRect(x,y,size,size);
    }
   }
   const size=l.size*breath;
