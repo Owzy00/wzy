@@ -288,8 +288,8 @@
   },
   {
     "path": "dist/data/jiao-poster.json",
-    "bytes": 1952569,
-    "sha256": "a24723b6e2ec20a885872195278d7de75a22226a7aa3aa7c6fc9f4d059825657",
+    "bytes": 1792536,
+    "sha256": "52a71b6e6cd62854392067c9695c11ea3343954f6d0ecb1715a6fe8d64acfb8e",
     "parts": [
       "deployment/assets/dist-data-jiao-poster-json/000.b64",
       "deployment/assets/dist-data-jiao-poster-json/001.b64",
@@ -302,12 +302,7 @@
       "deployment/assets/dist-data-jiao-poster-json/008.b64",
       "deployment/assets/dist-data-jiao-poster-json/009.b64",
       "deployment/assets/dist-data-jiao-poster-json/010.b64",
-      "deployment/assets/dist-data-jiao-poster-json/011.b64",
-      "deployment/assets/dist-data-jiao-poster-json/012.b64",
-      "deployment/assets/dist-data-jiao-poster-json/013.b64",
-      "deployment/assets/dist-data-jiao-poster-json/014.b64",
-      "deployment/assets/dist-data-jiao-poster-json/015.b64",
-      "deployment/assets/dist-data-jiao-poster-json/016.b64"
+      "deployment/assets/dist-data-jiao-poster-json/011.b64"
     ]
   }
 ]

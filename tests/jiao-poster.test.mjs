@@ -25,23 +25,28 @@ test('feathering preserves the exact surface and facial detail while giving the 
  assert.ok(face.length>800);assert.ok(face.every(p=>p.opacity===1));
 });
 
-test('36k contour dust targets replace flow particles without inflating the budget or sharing their opacity with the core',()=>{
- const points=decodeCloud(item),fringe=points.fringe,packed=createParticleBuffer(points,48000,true);
- assert.equal(fringe.length,36000);assert.equal(Buffer.from(item.fringe.data,'base64').length,36000*10);
- assert.ok(fringe.every(p=>Object.values(p).every(Number.isFinite)&&Math.abs(p.x)<.65&&Math.abs(p.y)<.68&&p.opacity>0&&p.opacity<1));
- assert.ok(fringe.filter(p=>Math.abs(p.y)>.5).length>200);assert.ok(new Set(fringe.map(p=>p.opacity)).size>160);
- for(const i of [0,17000,35999]){const o=i*10;assert.ok(Math.abs(packed.data[o]-fringe[i].x)<1e-7);assert.ok(Math.abs(packed.data[o+9]-(3-fringe[i].opacity))<1e-6);}
- assert.equal(packed.data[36000*10+9],1);assert.ok(packed.data[48000*10+9]<=0);
- assert.throws(()=>decodeCloud({...item,edgeAlpha:'AA=='}),/羽化/);assert.throws(()=>decodeCloud({...item,fringe:{...item.fringe,data:'AA=='}}),/流尘/);
- assert.equal(Buffer.from(item.fringe.emission,'base64').length,36000*4);assert.equal(packed.emission.byteLength,144000*8);assert.ok(packed.emission.slice(36000*2).every(n=>n===0));
- assert.ok(fringe.every(p=>Math.hypot(p.emitX,p.emitY)<.26));assert.ok(fringe.filter(p=>Math.hypot(p.emitX,p.emitY)>.01).length>20000);
- assert.throws(()=>decodeCloud({...item,fringe:{...item.fringe,emission:'AA=='}}),/逸出/);
+test('weathering and all 36k support grains originate on actual surface samples, with no detached bank',()=>{
+ assert.equal(item.fringe,undefined);assert.equal(item.weathering.kind,'surface-edge');assert.equal(item.weathering.count,96000);assert.equal(Buffer.from(item.weathering.data,'base64').length,96000*4);
+ const points=decodeCloud(item),edges=points.filter(p=>p.emitX||p.emitY),packed=createParticleBuffer(points,48000,true);
+ assert.equal(edges.length,item.weathering.active);assert.ok(edges.length>3000&&edges.length<9000);assert.ok(edges.every(p=>Math.hypot(p.emitX,p.emitY)>.06&&Math.hypot(p.emitX,p.emitY)<.202));
+ const key=(x,y,z,r,g,b)=>[Math.round(x*1000),Math.round(y*1000),Math.round(z*1000),r,g,b].join(','),sources=new Set(edges.map(p=>key(p.x,p.y,p.z,p.r,p.g,p.b)));
+ for(let i=0;i<36000;i++){const o=i*10,d=packed.data;assert.ok(sources.has(key(d[o],d[o+1],d[o+2],Math.round(d[o+3]*255),Math.round(d[o+4]*255),Math.round(d[o+5]*255))));assert.ok(packed.emission[i*2]||packed.emission[i*2+1]);}
+ let movingBody=0;for(let i=48000;i<packed.count;i++)if(packed.emission[i*2]||packed.emission[i*2+1])movingBody++;assert.equal(movingBody,edges.length);assert.equal(packed.emission.byteLength,144000*8);
+ const face=points.filter(p=>p.x>-.001&&p.x<.075&&p.y>-.43&&p.y<-.35);assert.ok(face.every(p=>p.emitX===0&&p.emitY===0));
+ assert.throws(()=>decodeCloud({...item,edgeAlpha:'AA=='}),/羽化/);assert.throws(()=>decodeCloud({...item,weathering:{...item.weathering,data:'AA=='}}),/风化/);
+});
+
+test('weathering stays on the body before detaching, with zero starting speed and no minimum gap',()=>{
+ const target={x:.2,y:-.1,z:.03},seed={x:0,y:0,z:.4},emission={x:.15,y:.03},life=3+seed.z*2.2;
+ for(const phase of [.05,.1,.19,.2]){const p=jiaoFringePose(target,seed,phase*life,emission);assert.equal(p.x,target.x);assert.equal(p.y,target.y);assert.equal(p.z,target.z);assert.equal(p.alpha,1);}
+ const near=jiaoFringePose(target,seed,.2001*life,emission);assert.ok(Math.hypot(near.x-target.x,near.y-target.y)<1e-8);
+ const bins=Array(6).fill(0),limits=[.002,.006,.015,.03,.06,Infinity];for(let i=50;i<950;i++){const p=jiaoFringePose(target,seed,i/1000*life,emission),distance=Math.hypot(p.x-target.x,p.y-target.y);bins[limits.findIndex(n=>distance<n)]++;}assert.ok(bins.every(n=>n>20),'continuous near-to-far density with no empty annulus');
 });
 
 test('edge particles travel outwards from their contour anchor and vanish before each invisible recycle',()=>{
  const target={x:.3,y:-.4,z:.02},seed={x:0,y:0,z:.42},original={...target},emission={x:.09,y:0},life=3+seed.z*2.2;
  const a=jiaoFringePose(target,seed,life*.2,emission),b=jiaoFringePose(target,seed,life*.8,emission);
- assert.ok(b.x>a.x+.05);assert.ok(a.x>target.x-emission.x);assert.ok(b.alpha<a.alpha);
+ assert.ok(b.x>a.x+.05);assert.equal(a.x,target.x);assert.ok(b.alpha<a.alpha);
  for(const phase of [0,1e-5,1-1e-5,1]){const p=jiaoFringePose(target,seed,life*phase,emission);assert.ok(p.alpha<1e-5,'invisible at the recycle seam');}
  const mid=jiaoFringePose(target,seed,life*.5,emission),repeat=jiaoFringePose(target,seed,life*1.5,emission);for(const k of ['x','y','z','alpha'])assert.ok(Math.abs(mid[k]-repeat[k])<1e-10);
  const slow=jiaoFringePose(target,seed,life*.2/.18,emission,.18);for(const k of ['x','y','alpha'])assert.ok(Math.abs(slow[k]-a[k])<1e-10,'reduced motion slows the lifecycle');
@@ -62,10 +67,18 @@ test('switching away from Jiao disables its emission attribute so other statues 
 test('Canvas held contour particles keep shedding and fading rather than becoming part of the static body cache',()=>{
  const stage=new StatueStage(),dots=[];stage.posterMode=true;stage.animationStarted=0;stage.origin={x:500,y:300};stage.body={};stage.fallbackPose={};stage.fallbackSurface={};stage.fallbackFlight={};stage.fallbackPalette=Array(12).fill('#bce2eb');
  stage.context={globalAlpha:1,clearRect(){},fillRect(x,y){dots.push({x,y,alpha:this.globalAlpha});},drawImage(){}};
- stage.fallbackGroups=Array.from({length:12},(_,i)=>i===0?[{target:{x:.3,y:-.2,z:0},seed:{x:0,y:0,z:.42},loose:false,fringe:true,emission:{x:.09,y:0},opacity:1}]:[]);
+ stage.fallbackGroups=Array.from({length:12},(_,i)=>i===0?[{target:{x:.3,y:-.2,z:0},seed:{x:0,y:0,z:.42},loose:false,fringe:true,weather:true,emission:{x:.09,y:0},opacity:1}]:[]);
  const layout=stage.layout(1280,720),sample={formation:1,release:0,presence:1,hold:true},life=3+.42*2.2;
  stage.drawFallback(layout,life*1.2*1000,sample,false);const a=dots.at(-1);stage.drawFallback(layout,life*1.8*1000,sample,false);const b=dots.at(-1);
  assert.equal(dots.length,2);assert.ok(b.x>a.x+25);assert.ok(b.alpha<a.alpha*.4);assert.ok(a.alpha>.5);
+});
+
+test('Canvas animates every weathering body grain and excludes them from the fixed surface cache',()=>{
+ const prior=globalThis.document,stage=new StatueStage();let canvasCount=0,cacheDots=0;
+ globalThis.document={createElement(){const body=canvasCount++===0;return {getContext(){return {fillRect(){if(body)cacheDots++;},createRadialGradient(){return {addColorStop(){}};}};}};}};
+ try{stage.posterMode=true;stage.item=item;const prepared=stage.prepare(item);stage.points=prepared.points;stage.prepareFallback();const grains=stage.fallbackGroups.flat();
+  assert.equal(cacheDots,item.count-item.weathering.active);assert.equal(grains.filter(p=>p.weather&&!p.fringe).length,item.weathering.active);assert.equal(grains.length,12000);assert.ok(grains.filter(p=>p.weather).every(p=>p.color&&p.emission));
+ }finally{if(prior===undefined)delete globalThis.document;else globalThis.document=prior;}
 });
 test('poster upload preserves cool colors with a 144k point budget and a separate bounded cache',()=>{
  const stage=new StatueStage(),points=decodeCloud(item),packed=createParticleBuffer(points,48000,true);assert.equal(packed.count,144000);assert.equal(packed.data.byteLength,144000*40);
@@ -86,5 +99,5 @@ test('Jiao uses one GPU draw and no point uploads per frame; other mansions do n
 test('the 28 original image assets and v21 navigation / gesture code stay unchanged',async()=>{
  const bytes=await readFile(new URL('../dist/data/statues.json',import.meta.url));assert.equal(createHash('sha256').update(bytes).digest('hex'),'70e0f1ef689c9508552c06d14673e3d8079c5b1660755607bc720a5c62220966');
  const baseline={"dist/app.js":"957005d6ffc94d5704460b7b4ba20f4689da7f18","dist/astronomy.js":"6022fe7be84cd816c16b02ae18a09115d21e85c5","dist/cloud-field.js":"1fdf09b69f34e71ae0a60cef025b74c085cddd5a","dist/gesture-camera.js":"b289de58b568aef57be7ef805b3662cd7be13b93","dist/gesture-core.js":"dd04d735a2b7a6f9e11a3a4f27069aeb2b072677","dist/hand-worker.js":"ff71cb724f9362bbca631c5b2526090e5c94dbd1","dist/style.css":"c951500c5d896aa3541bc74a735b4b16f7c4d5fc"};
- for(const [file,sha]of Object.entries(baseline)){const text=(await readFile(new URL('../'+file,import.meta.url),'utf8')).replaceAll('v=26','v=21');const data=Buffer.from(text);assert.equal(createHash('sha1').update(Buffer.from('blob '+data.length+'\0')).update(data).digest('hex'),sha,file);}
+ for(const [file,sha]of Object.entries(baseline)){const text=(await readFile(new URL('../'+file,import.meta.url),'utf8')).replaceAll('v=27','v=21');const data=Buffer.from(text);assert.equal(createHash('sha1').update(Buffer.from('blob '+data.length+'\0')).update(data).digest('hex'),sha,file);}
 });

@@ -1,6 +1,6 @@
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=26';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=26';
-import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=26';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=27';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=27';
+import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=27';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -8,8 +8,7 @@ export function decodeCloud(item){
  const binary=atob(item.data),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);if(bytes.length!==item.count*9)throw new Error('点云字节数不匹配');
  const v=new DataView(bytes.buffer),points=[];for(let i=0;i<item.count;i++){const o=i*9;points.push({x:v.getInt16(o,true)/1000,y:v.getInt16(o+2,true)/1000,z:v.getInt16(o+4,true)/1000,r:v.getUint8(o+6),g:v.getUint8(o+7),b:v.getUint8(o+8)});}
  if(item.style==='jiao-poster'&&item.edgeAlpha){const alpha=atob(item.edgeAlpha);if(alpha.length!==points.length)throw new Error('轮廓羽化数据不匹配');for(let i=0;i<points.length;i++)points[i].opacity=alpha.charCodeAt(i)/255;}
- if(item.style==='jiao-poster'&&item.fringe){const raw=atob(item.fringe.data);if(raw.length!==item.fringe.count*10)throw new Error('流尘字节数不匹配');const b=Uint8Array.from(raw,c=>c.charCodeAt(0)),f=new DataView(b.buffer);points.fringe=[];for(let i=0;i<item.fringe.count;i++){const o=i*10;points.fringe.push({x:f.getInt16(o,true)/1000,y:f.getInt16(o+2,true)/1000,z:f.getInt16(o+4,true)/1000,r:f.getUint8(o+6),g:f.getUint8(o+7),b:f.getUint8(o+8),opacity:f.getUint8(o+9)/255});}}
- if(points.fringe&&item.fringe.emission){const raw=atob(item.fringe.emission);if(raw.length!==item.fringe.count*4)throw new Error('边缘逸出数据不匹配');const b=Uint8Array.from(raw,c=>c.charCodeAt(0)),v=new DataView(b.buffer);for(let i=0;i<points.fringe.length;i++){points.fringe[i].emitX=v.getInt16(i*4,true)/1000;points.fringe[i].emitY=v.getInt16(i*4+2,true)/1000;}}
+ if(item.style==='jiao-poster'&&item.weathering){const raw=atob(item.weathering.data);if(item.weathering.count!==points.length||raw.length!==points.length*4)throw new Error('边缘风化数据不匹配');const b=Uint8Array.from(raw,c=>c.charCodeAt(0)),v=new DataView(b.buffer);for(let i=0;i<points.length;i++){points[i].emitX=v.getInt16(i*4,true)/1000;points[i].emitY=v.getInt16(i*4+2,true)/1000;}}
  return points;
 }
 export class WindField{
@@ -62,10 +61,10 @@ export function createParticleBuffer(points,flowCount=96000,poster=false){
 
  const emission=poster?new Float32Array(count*2):null;
  if(poster){
-  // Reallocate the flow budget, rather than increasing GPU work. Negative
-  // aFlow carries surface feather opacity; [2,3] carries peripheral dust.
-  for(let i=0;i<points.length;i++)data[(i+flowCount)*10+9]=-(1-(points[i].opacity??1));
-  const fringe=points.fringe||[];for(let i=0;i<Math.min(flowCount,fringe.length);i++){const o=i*10;tint(fringe[i],o);data[o+9]=3-fringe[i].opacity;emission[i*2]=fringe[i].emitX||0;emission[i*2+1]=fringe[i].emitY||0;}
+  // The body's own edge grains move. Additional grains share exact surface
+  // samples and colors, so the flow has no detached exterior starting bank.
+  const edges=[];for(let i=0;i<points.length;i++){const p=points[i],index=i+flowCount;data[index*10+9]=-(1-(p.opacity??1));emission[index*2]=p.emitX||0;emission[index*2+1]=p.emitY||0;if(p.emitX||p.emitY)edges.push(p);}
+  if(edges.length)for(let i=0;i<Math.min(flowCount,36000);i++){const o=i*10,p=edges[(i*7919+13)%edges.length];tint(p,o);data[o+9]=3-(.45+.55*(p.opacity??1));emission[i*2]=p.emitX;emission[i*2+1]=p.emitY;}
  }
 
  return {data,count:points.length+flowCount,flowCount,...(emission?{emission}:{})};
@@ -91,13 +90,13 @@ vec2 wake(vec2 p,vec4 ripple,float spread){
 }
 void main(){
  // Explicit morphing still has a quiet, changing flow under reduced motion.
- float motion=mix(1.,.18,uReduced),fringe=uPoster*step(1.5,aFlow),flow=clamp(aFlow,0.,1.);
+ float motion=mix(1.,.18,uReduced),fringe=uPoster*step(1.5,aFlow),flow=clamp(aFlow,0.,1.),weather=uPoster*step(.0000001,dot(aEmission,aEmission));
  float fringeDistance=clamp(aFlow-2.,0.,1.),loose=flow*step(mix(.89,.84,uPoster),aSeed.z)*(1.-fringe);
  float settle=cloudSettle(aSeed,uFormation);
  float breath=1.+sin(uTime*1.22)*.007*motion;
  vec3 target=aTarget;target.xy*=breath;
  vec4 edgeDust=jiaoFringePose(target,aSeed,uTime,aEmission*breath,motion);
- target=mix(target,edgeDust.xyz,fringe);
+ target=mix(target,edgeDust.xyz,weather);
  target.xy+=target.z*uPointer*vec2(.055,.025)*motion;
  vec3 p=cloudPose(target,aSeed,uTime,uFormation,uRelease,loose,motion);
  float zoom=mix(1.75,1.,smoothstep(.12,.95,uFormation));
@@ -125,7 +124,7 @@ void main(){
  vColor=mix(vColor,mix(aurora,aColor,settle*(1.-loose))*glint*1.20,uPoster);
  vAlpha*=mix(1.,mix(.83,1.52,settle)*(1.+min(aFlow,0.)),uPoster);
  vAlpha*=mix(1.,(1.-fringeDistance)*.88,fringe*settle);
- vAlpha*=mix(1.,edgeDust.w,fringe);
+ vAlpha*=mix(1.,edgeDust.w,weather);
  float size=mix(2.1,1.9,settle)*uDpr*perspective;
  size*=mix(.70,1.3,aSeed.z)*mix(1.,.92,uPoster);
  size*=mix(1.,.78,fringe);
@@ -215,15 +214,16 @@ export class StatueStage{
 
  prepareFallback(){
   this.body=document.createElement('canvas');this.body.width=700;this.body.height=700;const c=this.body.getContext('2d');
-  for(const p of this.points){c.fillStyle=this.posterMode?`rgb(${Math.min(255,p.r*1.20)},${Math.min(255,p.g*1.20)},${Math.min(255,p.b*1.20)})`:`rgb(${Math.min(255,p.r*1.05+9)},${Math.min(255,p.g*1.02+6)},${Math.min(255,p.b*.94+4)})`;c.globalAlpha=this.posterMode?.95*(p.opacity??1):.82;const dot=this.posterMode?1.05:.9;c.fillRect((p.x+.5)*700,(p.y+.5)*700,dot,dot);}
+  for(const p of this.points){if(this.posterMode&&(p.emitX||p.emitY))continue;c.fillStyle=this.posterMode?`rgb(${Math.min(255,p.r*1.20)},${Math.min(255,p.g*1.20)},${Math.min(255,p.b*1.20)})`:`rgb(${Math.min(255,p.r*1.05+9)},${Math.min(255,p.g*1.02+6)},${Math.min(255,p.b*.94+4)})`;c.globalAlpha=this.posterMode?.95*(p.opacity??1):.82;const dot=this.posterMode?1.05:.9;c.fillRect((p.x+.5)*700,(p.y+.5)*700,dot,dot);}
   const packed=this.prepare(this.item).packed,data=packed.data,count=Math.min(12000,packed.count);
+  const indices=[];if(this.posterMode){const other=[];for(let i=0;i<packed.count;i++){if(i>=packed.flowCount&&(packed.emission[i*2]||packed.emission[i*2+1]))indices.push(i);else other.push(i);}const remaining=Math.max(0,count-indices.length);for(let i=0;i<remaining;i++)indices.push(other[Math.floor(i*other.length/remaining)]);}else for(let i=0;i<count;i++)indices.push(Math.floor(i*packed.count/count));
   this.fallbackGroups=Array.from({length:12},()=>[]);
-  for(let i=0;i<count;i++){const index=Math.floor(i*packed.count/count),o=index*10,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
-   const fringe=this.posterMode&&data[o+9]>=2;
-   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:!fringe&&data[o+9]>.5&&seed.z>=(this.posterMode?.84:.89),fringe,emission:fringe?{x:packed.emission[index*2],y:packed.emission[index*2+1]}:null,opacity:this.posterMode?data[o+9]<0?1+data[o+9]:fringe?3-data[o+9]:1:1});
+  for(const index of indices){const o=index*10,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
+   const fringe=this.posterMode&&data[o+9]>=2,weather=this.posterMode&&Boolean(packed.emission[index*2]||packed.emission[index*2+1]);
+   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:!fringe&&data[o+9]>.5&&seed.z>=(this.posterMode?.84:.89),fringe,weather,emission:weather?{x:packed.emission[index*2],y:packed.emission[index*2+1]}:null,color:weather?`rgb(${Math.min(255,Math.round(data[o+3]*306))},${Math.min(255,Math.round(data[o+4]*306))},${Math.min(255,Math.round(data[o+5]*306))})`:null,opacity:this.posterMode?data[o+9]<0?1+data[o+9]:fringe?3-data[o+9]:1:1});
   }
   this.fallbackPose={};this.fallbackSurface={};this.fallbackFlight={};this.fallbackScreen={};this.fallbackDisplacement={};this.fallbackPalette=Array.from({length:12},(_,i)=>this.posterMode?`rgb(${69+i*10},${150+i*7},${177+i*6})`:`rgb(${138+i*9},${102+i*9},${56+i*8})`);
-  this.haloSprite=document.createElement('canvas');this.haloSprite.width=this.haloSprite.height=24;const hc=this.haloSprite.getContext('2d'),halo=hc.createRadialGradient(12,12,0,12,12,12);halo.addColorStop(0,'#fff6ce');halo.addColorStop(.12,'#ffdf9bba');halo.addColorStop(.4,'#d8af6030');halo.addColorStop(1,'#d8af6000');hc.fillStyle=halo;hc.fillRect(0,0,24,24);this.glints=this.points.filter((_,i)=>i%1403===0);
+  this.haloSprite=document.createElement('canvas');this.haloSprite.width=this.haloSprite.height=24;const hc=this.haloSprite.getContext('2d'),halo=hc.createRadialGradient(12,12,0,12,12,12);halo.addColorStop(0,'#fff6ce');halo.addColorStop(.12,'#ffdf9bba');halo.addColorStop(.4,'#d8af6030');halo.addColorStop(1,'#d8af6000');hc.fillStyle=halo;hc.fillRect(0,0,24,24);this.glints=this.points.filter((p,i)=>i%1403===0&&!(this.posterMode&&(p.emitX||p.emitY)));
  }
  drawFallback(l,now,sample,reduced){
   const c=this.context;c.clearRect(0,0,l.width,l.height);
@@ -235,9 +235,9 @@ export class StatueStage{
   for(let group=0;group<12;group++){
    c.fillStyle=this.fallbackPalette[group];
    for(const particle of this.fallbackGroups[group]){
-    if(solid>.95&&!particle.loose&&!particle.fringe&&disturbed<.005)continue;
+    if(solid>.95&&!particle.loose&&!particle.weather&&disturbed<.005)continue;
     target.x=particle.target.x*breath+particle.target.z*this.pointer.x*.055*motion;target.y=particle.target.y*breath+particle.target.z*this.pointer.y*.025*motion;target.z=particle.target.z;
-    let dustAlpha=1;if(particle.fringe){jiaoFringePose(target,particle.seed,time,particle.emission,motion,target);dustAlpha=target.alpha;}
+    let dustAlpha=1;if(particle.weather){jiaoFringePose(target,particle.seed,time,particle.emission,motion,target);dustAlpha=target.alpha;}
     if(sample.hold&&!particle.loose){p.x=target.x;p.y=target.y;p.z=target.z;}else cloudPose(target,particle.seed,time,sample.formation,sample.release,particle.loose,motion,p);
     const settled=cloudSettle(particle.seed,sample.formation),perspective=1/(1+p.z*.32*(1-settled));
     let x=l.cx+p.x*l.size*zoom*perspective+this.pointer.x*46*settled*(1-sample.release)*motion;
@@ -245,7 +245,7 @@ export class StatueStage{
     let visibility=1;if(time<2.5){const source=sources[Math.floor(((particle.seed.z*17.31+particle.seed.x*7.17)%1)*sources.length)];screen.x=x;screen.y=y;const flight=starFlight(particle.seed,time,source,screen,Math.min(l.width,l.height),motion,this.fallbackFlight);x=flight.x;y=flight.y;visibility=flight.visibility;}
     if(waves.length){const d=rippleDisplacement(x,y,waves,Math.min(l.width,l.height)*.07,this.fallbackDisplacement);x+=d.x*freeMotion*motion;y+=d.y*freeMotion*motion;}
     c.globalAlpha=visibility*(1-smooth((sample.release-.65)/.35))*(particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));
-    if(this.posterMode)c.globalAlpha=visibility*(1-smooth((sample.release-.65)/.35))*particle.opacity*(particle.fringe?.60*dustAlpha:particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));
+    if(this.posterMode){c.fillStyle=particle.color||this.fallbackPalette[group];c.globalAlpha=visibility*(1-smooth((sample.release-.65)/.35))*particle.opacity*(particle.weather?(particle.fringe?.60:.95)*dustAlpha:particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));}
     const size=(.75+particle.seed.z*.55)*perspective*(1+disturbed*.55);c.fillRect(x,y,size,size);
    }
   }

@@ -1,25 +1,23 @@
 const jiaoSmooth=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
-export const JIAO_DUST_SPREAD=1.5;
-// Each contour particle repeatedly leaves its own silhouette anchor. Staggered
-// lifetimes fade to zero before recycling, keeping the face and folds intact.
+// The target is an actual body sample, not a displaced exterior anchor. Grains
+// remain attached, loosen with zero initial speed, then weather away and fade.
 export function jiaoFringePose(target,seed,time,emission,motion=1,out={}){
  const life=3+seed.z*2.2,cycle=time*motion/life+seed.x*.79+seed.y*.21,phase=cycle-Math.floor(cycle);
  const length=Math.hypot(emission.x,emission.y),nx=emission.x/Math.max(.0001,length),ny=emission.y/Math.max(.0001,length);
- const travel=(.003+(Math.min(.13,length)*.9+.024)*phase)*JIAO_DUST_SPREAD,swirl=Math.sin(phase*4.5+seed.z*9)*(.002+phase*.010)*JIAO_DUST_SPREAD;
- out.x=target.x-emission.x+nx*travel-ny*swirl;
- out.y=target.y-emission.y+ny*travel+nx*swirl-phase*phase*.012*JIAO_DUST_SPREAD;
- out.z=target.z-phase*.012;
- out.alpha=jiaoSmooth(phase/.08)*(1-jiaoSmooth((phase-.26)/.74));out.phase=phase;return out;
+ const progress=Math.max(0,(phase-.20)/.80),peel=progress*progress,swirl=Math.sin(progress*4.5+seed.z*9)*peel*.014;
+ out.x=target.x+emission.x*peel-ny*swirl;
+ out.y=target.y+emission.y*peel+nx*swirl-peel*.010;
+ out.z=target.z-peel*.012;
+ out.alpha=jiaoSmooth(phase/.05)*(1-jiaoSmooth((phase-.50)/.50));out.phase=phase;return out;
 }
 export const JIAO_FRINGE_GLSL=`
 vec4 jiaoFringePose(vec3 target,vec3 seed,float time,vec2 emission,float motion){
- float spread=${JIAO_DUST_SPREAD.toFixed(1)};
  float phase=fract(time*motion/(3.+seed.z*2.2)+seed.x*.79+seed.y*.21);
  float len=length(emission);vec2 normal=emission/max(.0001,len);
- float travel=(.003+(min(.13,len)*.9+.024)*phase)*spread,swirl=sin(phase*4.5+seed.z*9.)*(.002+phase*.010)*spread;
- vec2 xy=target.xy-emission+normal*travel+vec2(-normal.y,normal.x)*swirl-vec2(0.,phase*phase*.012*spread);
- float alpha=smoothstep(0.,.08,phase)*(1.-smoothstep(.26,1.,phase));
- return vec4(xy,target.z-phase*.012,alpha);
+ float progress=max(0.,(phase-.20)/.80),peel=progress*progress,swirl=sin(progress*4.5+seed.z*9.)*peel*.014;
+ vec2 xy=target.xy+emission*peel+vec2(-normal.y,normal.x)*swirl-vec2(0.,peel*.010);
+ float alpha=smoothstep(0.,.05,phase)*(1.-smoothstep(.50,1.,phase));
+ return vec4(xy,target.z-peel*.012,alpha);
 }`;
 export function jiaoPresence(formation,release=0){return jiaoSmooth((formation-.12)/.64)*(1-jiaoSmooth(release));}
 // Fine dotted orbital arcs behind this one poster figure. These never
