@@ -1,7 +1,8 @@
-import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=29';
-import {GestureCamera} from './gesture-camera.js?v=29';
-import {cloudPresence} from './cloud-field.js?v=29';
-import {WindField,StatueStage} from './particle-effects.js?v=29';
+import {stagePresentation,stageEditorialMarkup} from './stage-editorial.js?v=30';
+import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=30';
+import {GestureCamera} from './gesture-camera.js?v=30';
+import {cloudPresence} from './cloud-field.js?v=30';
+import {WindField,StatueStage} from './particle-effects.js?v=30';
 export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new GestureCamera(video,callbacks),stageFactory=()=>new StatueStage()}={}){
  const visualStyles=new Map();let candidateAt=-Infinity;
  const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator(),handParticles=new FingerParticleInput();
@@ -10,9 +11,9 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
  document.body.insertAdjacentHTML('beforeend',`<div class="experience-actions"><button id="gesture-toggle" aria-expanded="false">◌ 手势交互</button><button id="morph-trigger">✧ 粒子化形</button></div>
  <section class="gesture-panel" id="gesture-panel" hidden aria-label="手势控制"><div class="gesture-panel-head"><strong>以手，环顾星空</strong><button id="gesture-close" aria-label="收起手势面板">×</button></div><p>张掌像拖动画布一样移动星图，停手即停，将星宿移近中央准星。握拳点亮，再张掌化形；成形约 4 秒后自动返回。生成与展示时，任意一根手指相对手掌晃动，即可泛起局部涟漪；整手移动不发波，波纹留在实际晃动的指尖对应处，同时最多五处，同一指尖不叠圈；也可移动鼠标，随后平滑归位。</p><div class="gesture-meter"><span id="gesture-pose">正在接入摄像头</span><progress id="gesture-progress" max="1" value="0" aria-label="握拳张掌进度"></progress></div><p id="camera-status" role="status" aria-live="polite">首次进入时请允许摄像头。视频仅在本机处理，不上传、不录制。</p><div class="gesture-buttons"><button id="camera-start">开启摄像头</button><button id="camera-stop" disabled>关闭摄像头</button></div><button id="manual-wind">↝ 推动星尘 <kbd>W</kbd></button><p class="camera-note">收起面板仍可交互。双手入镜或丢手会重置手势。备选：鼠标拖动环顾，M 化形，Esc 返回。</p></section>
  <section id="gesture-hud" class="gesture-hud" aria-label="摄像头与操作提示" data-camera-state="off"><div class="camera-card-head"><span><i class="live-dot"></i>手势预览</span><button id="camera-card-control" aria-label="开启摄像头">开启</button></div><div id="camera-viewport" class="camera-viewport"><video id="hand-video" autoplay muted playsinline aria-label="本机镜像摄像头预览"></video><canvas id="hand-overlay" aria-hidden="true"></canvas><div id="camera-placeholder" class="camera-placeholder"><span id="camera-placeholder-text">摄像头未开启</span><small>画面仅在本机处理</small></div></div><div class="camera-guide"><span class="camera-sky-steps">张掌 · 拖动星图<br>握拳 · 点亮星宿<br>张掌 · 粒子化形</span><span class="camera-morph-steps">轻晃指尖，泛起粒子涟漪</span></div><div class="camera-feedback"><span id="gesture-hint" role="status" aria-live="polite">正在接入摄像头…</span><progress id="gesture-hud-progress" max="1" value="0" aria-label="手势操作进度"></progress></div></section>
- <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><div class="stage-title"><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture</span><span id="stage-input-hint" aria-live="polite"></span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
+ <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><aside id="stage-atlas" class="stage-atlas" aria-label="当前星宿固定星象"></aside><aside id="stage-record" class="stage-record" aria-label="彩塑与星宿介绍"></aside><div class="stage-title"><small id="stage-index" class="stage-index"></small><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture</span><span id="stage-input-hint" aria-live="polite"></span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
  let posterPromise=null;
- function loadJiaoPoster(){return posterPromise||(posterPromise=fetch('./data/jiao-poster.json?v=29').then(r=>{if(!r.ok)throw new Error('角木蛟海报素材暂未加载，请重试');return r.json();}).then(item=>{if(item.id!==0||item.name!=='角'||item.style!=='jiao-poster')throw new Error('角木蛟素材映射错误');return item;}).catch(error=>{posterPromise=null;throw error;}));}
+ function loadJiaoPoster(){return posterPromise||(posterPromise=fetch('./data/jiao-poster.json?v=30').then(r=>{if(!r.ok)throw new Error('角木蛟海报素材暂未加载，请重试');return r.json();}).then(item=>{if(item.id!==0||item.name!=='角'||item.style!=='jiao-poster')throw new Error('角木蛟素材映射错误');return item;}).catch(error=>{posterPromise=null;throw error;}));}
  function warmSelected(){
   if(warmTask!==null){if(globalThis.cancelIdleCallback)cancelIdleCallback(warmTask);else clearTimeout(warmTask);}
   const item=pack?.items.find(p=>p.id===adapter.selected().id);if(!item)return;
@@ -80,6 +81,8 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
   if(selected.id===0){try{adapter.notice('正在准备角木蛟海报粒子…');item=await loadJiaoPoster();if(adapter.selected().id!==0){preparing=false;machine.reset(performance.now());adapter.notice('星宿已切换，请重新触发化形');return;}}catch(error){preparing=false;machine.reset(performance.now());adapter.notice(error.message);return;}}
   if(!item){preparing=false;adapter.notice('当前宿的彩塑映射尚未就绪');return;}
   const snapshot=adapter.snapshot();
+  const editorial=stageEditorialMarkup(stagePresentation(adapter.stageDetails?.()||selected,item));
+  ui('stage-atlas').innerHTML=editorial.atlas;ui('stage-record').innerHTML=editorial.record;ui('stage-index').textContent=editorial.index;
   try{if(!stage.start(item,performance.now(),adapter.emissionSources?.()||[])){adapter.notice('化形正在冷却，请稍候');return;}}catch(error){adapter.notice('化形未能启动，请重试：'+error.message);return;}finally{preparing=false;}
   restoring=snapshot;lastCountdown=-1;machine.reset(performance.now(),'BLOCKED');document.body.classList.add('morphing');document.body.classList.toggle('jiao-poster',item.style==='jiao-poster');ui('stage-credit').innerHTML=item.style==='jiao-poster'?'用户提供海报 · 角木蛟粒子演绎<br>主体姿态与颜色取自海报':'用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture';ui('statue-stage-ui').hidden=false;ui('stage-title').textContent=item.title;ui('stage-pinyin').textContent=item.pinyin;ui('morph-trigger').disabled=true;document.querySelector('main').inert=true;document.querySelector('.bottom-panel').inert=true;ui('stage-return').focus({preventScroll:true});
  }

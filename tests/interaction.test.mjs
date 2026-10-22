@@ -20,7 +20,7 @@ async function scene(run,{poster=null,selectedId=3}={}){
  let cameraVideo;let callbacks,selected=selectedId,selectedCount=0,panDistance=0,morphs=0,starts=0,stops=0,restores=0,touches=0;
  const stage={timeline:new MorphTimeline(),get busy(){return this.timeline.busy;},get occludesSky(){return this.busy;},prepare(){},interact(...args){this.lastInteraction=args;(this.interactions??=[]).push(args);touches++;},interactFingers(inputs,now,palm){this.lastFingers=inputs;this.interact(palm.x,palm.y,now,Math.max(0,...inputs.map(p=>p.strength)),'hand');},start(item,now,sources){this.sources=sources;if(!this.timeline.start(now))return false;this.item=item;morphs++;return true;},draw(ctx,now){return this.timeline.sample(now);},finish(now){this.timeline.finish(now);},pointer:{}};
  const camera={running:false,inferenceMs:30,async start(){starts++;this.running=true;callbacks.onStatus('running','已接入');},stop(){stops++;this.running=false;callbacks.onStatus('off','已关闭');}};
- const adapter={emissionSources:()=>[{x:.3,y:.4},{x:.5,y:.6}],selected:()=>({id:selected,name:poster&&selected===0?'角':'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
+ const adapter={stageDetails:()=>({id:selected,name:poster&&selected===0?'角':'宿'+selected,group:Math.floor(selected/7),members:[{id:1,ra:1,dec:.1,mag:1},{id:2,ra:1.02,dec:.15,mag:2}],center:{ra:1.01,dec:.125},lines:[[1,2]]}),emissionSources:()=>[{x:.3,y:.4},{x:.5,y:.6}],selected:()=>({id:selected,name:poster&&selected===0?'角':'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
  try{
   const experience=initExperience(adapter,{cameraFactory:(video,c)=>{cameraVideo=video;callbacks=c;return camera;},stageFactory:()=>stage});
   await new Promise(resolve=>setImmediate(resolve));
@@ -96,4 +96,13 @@ test('persistent live preview reuses the recognition video and exposes camera co
  s.element('hand-video').videoWidth=1280;s.element('hand-video').videoHeight=720;s.element('hand-video').onloadedmetadata();
  assert.equal(s.element('camera-viewport').style.aspectRatio,'1280/720');
  s.element('hand-video').onloadeddata();assert.equal(s.element('camera-placeholder').hidden,true);
+}));
+
+test('stage star diagram and editorial remain unchanged through hand and mouse particle interaction',async()=>scene(async s=>{
+ await s.element('morph-trigger').onclick();
+ const atlas=s.element('stage-atlas').innerHTML,record=s.element('stage-record').innerHTML;
+ assert.match(atlas,/宿3宿固定星点连线/);assert.match(record,/J2000/);assert.equal(s.element('stage-index').textContent,'MANSION 04 / 28');
+ const time=s.stage.timeline.started;
+ for(const t of [100,1000,3000,5600]){s.emit('open',time+t,.3+t*.00002);s.listeners.pointermove({clientX:300+t*.01,clientY:400,target:{id:'sky'}});s.experience.draw(null,time+t,1000,800,null,false);}
+ assert.equal(s.element('stage-atlas').innerHTML,atlas);assert.equal(s.element('stage-record').innerHTML,record);assert.equal(s.counts().starts,1);
 }));
