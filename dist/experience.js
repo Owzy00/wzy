@@ -1,7 +1,7 @@
-import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=24';
-import {GestureCamera} from './gesture-camera.js?v=24';
-import {cloudPresence} from './cloud-field.js?v=24';
-import {WindField,StatueStage} from './particle-effects.js?v=24';
+import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=25';
+import {GestureCamera} from './gesture-camera.js?v=25';
+import {cloudPresence} from './cloud-field.js?v=25';
+import {WindField,StatueStage} from './particle-effects.js?v=25';
 export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new GestureCamera(video,callbacks),stageFactory=()=>new StatueStage()}={}){
  const visualStyles=new Map();let candidateAt=-Infinity;
  const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator(),handParticles=new FingerParticleInput();
@@ -12,7 +12,7 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
  <div id="gesture-hud" class="gesture-hud" hidden><span class="live-dot"></span><span id="gesture-hint" role="status" aria-live="polite">正在接入摄像头…</span><progress id="gesture-hud-progress" max="1" value="0" aria-label="手势操作进度"></progress></div>
  <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><div class="stage-title"><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture</span><span id="stage-input-hint" aria-live="polite"></span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
  let posterPromise=null;
- function loadJiaoPoster(){return posterPromise||(posterPromise=fetch('./data/jiao-poster.json').then(r=>{if(!r.ok)throw new Error('角木蛟海报素材暂未加载，请重试');return r.json();}).then(item=>{if(item.id!==0||item.name!=='角'||item.style!=='jiao-poster')throw new Error('角木蛟素材映射错误');return item;}).catch(error=>{posterPromise=null;throw error;}));}
+ function loadJiaoPoster(){return posterPromise||(posterPromise=fetch('./data/jiao-poster.json?v=25').then(r=>{if(!r.ok)throw new Error('角木蛟海报素材暂未加载，请重试');return r.json();}).then(item=>{if(item.id!==0||item.name!=='角'||item.style!=='jiao-poster')throw new Error('角木蛟素材映射错误');return item;}).catch(error=>{posterPromise=null;throw error;}));}
  function warmSelected(){
   if(warmTask!==null){if(globalThis.cancelIdleCallback)cancelIdleCallback(warmTask);else clearTimeout(warmTask);}
   const item=pack?.items.find(p=>p.id===adapter.selected().id);if(!item)return;

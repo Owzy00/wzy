@@ -1,6 +1,6 @@
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=24';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=24';
-import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=24';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=25';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=25';
+import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=25';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -9,6 +9,7 @@ export function decodeCloud(item){
  const v=new DataView(bytes.buffer),points=[];for(let i=0;i<item.count;i++){const o=i*9;points.push({x:v.getInt16(o,true)/1000,y:v.getInt16(o+2,true)/1000,z:v.getInt16(o+4,true)/1000,r:v.getUint8(o+6),g:v.getUint8(o+7),b:v.getUint8(o+8)});}
  if(item.style==='jiao-poster'&&item.edgeAlpha){const alpha=atob(item.edgeAlpha);if(alpha.length!==points.length)throw new Error('轮廓羽化数据不匹配');for(let i=0;i<points.length;i++)points[i].opacity=alpha.charCodeAt(i)/255;}
  if(item.style==='jiao-poster'&&item.fringe){const raw=atob(item.fringe.data);if(raw.length!==item.fringe.count*10)throw new Error('流尘字节数不匹配');const b=Uint8Array.from(raw,c=>c.charCodeAt(0)),f=new DataView(b.buffer);points.fringe=[];for(let i=0;i<item.fringe.count;i++){const o=i*10;points.fringe.push({x:f.getInt16(o,true)/1000,y:f.getInt16(o+2,true)/1000,z:f.getInt16(o+4,true)/1000,r:f.getUint8(o+6),g:f.getUint8(o+7),b:f.getUint8(o+8),opacity:f.getUint8(o+9)/255});}}
+ if(points.fringe&&item.fringe.emission){const raw=atob(item.fringe.emission);if(raw.length!==item.fringe.count*4)throw new Error('边缘逸出数据不匹配');const b=Uint8Array.from(raw,c=>c.charCodeAt(0)),v=new DataView(b.buffer);for(let i=0;i<points.fringe.length;i++){points.fringe[i].emitX=v.getInt16(i*4,true)/1000;points.fringe[i].emitY=v.getInt16(i*4+2,true)/1000;}}
  return points;
 }
 export class WindField{
@@ -59,18 +60,19 @@ export function createParticleBuffer(points,flowCount=96000,poster=false){
  if(points.length)for(let i=0;i<flowCount;i++){const o=i*10,p=points[(i*7919+13)%points.length];tint(p,o);data[o]+=(data[o+6]-.5)*.0014;data[o+1]+=(data[o+7]-.5)*.0014;}
  for(let i=0;i<points.length;i++)tint(points[i],(i+flowCount)*10);
 
+ const emission=poster?new Float32Array(count*2):null;
  if(poster){
   // Reallocate the flow budget, rather than increasing GPU work. Negative
   // aFlow carries surface feather opacity; [2,3] carries peripheral dust.
   for(let i=0;i<points.length;i++)data[(i+flowCount)*10+9]=-(1-(points[i].opacity??1));
-  const fringe=points.fringe||[];for(let i=0;i<Math.min(flowCount,fringe.length);i++){const o=i*10;tint(fringe[i],o);data[o+9]=3-fringe[i].opacity;}
+  const fringe=points.fringe||[];for(let i=0;i<Math.min(flowCount,fringe.length);i++){const o=i*10;tint(fringe[i],o);data[o+9]=3-fringe[i].opacity;emission[i*2]=fringe[i].emitX||0;emission[i*2+1]=fringe[i].emitY||0;}
  }
 
- return {data,count:points.length+flowCount,flowCount};
+ return {data,count:points.length+flowCount,flowCount,...(emission?{emission}:{})};
 }
 const FLOW_VERTEX=`
 precision highp float;
-attribute vec3 aTarget,aColor,aSeed;attribute float aFlow;
+attribute vec3 aTarget,aColor,aSeed;attribute float aFlow;attribute vec2 aEmission;
 uniform vec2 uViewport,uPointer,uOrigin;uniform vec3 uLayout;
 uniform vec2 uSource0,uSource1,uSource2,uSource3,uSource4;uniform float uSourceCount;
 uniform float uTime,uAmount,uFormation,uRelease,uDpr,uReduced;uniform mediump float uPoster;
@@ -94,7 +96,8 @@ void main(){
  float settle=cloudSettle(aSeed,uFormation);
  float breath=1.+sin(uTime*1.22)*.007*motion;
  vec3 target=aTarget;target.xy*=breath;
- target=mix(target,jiaoFringePose(target,aSeed,uTime,fringeDistance,motion),fringe);
+ vec4 edgeDust=jiaoFringePose(target,aSeed,uTime,aEmission*breath,motion);
+ target=mix(target,edgeDust.xyz,fringe);
  target.xy+=target.z*uPointer*vec2(.055,.025)*motion;
  vec3 p=cloudPose(target,aSeed,uTime,uFormation,uRelease,loose,motion);
  float zoom=mix(1.75,1.,smoothstep(.12,.95,uFormation));
@@ -122,6 +125,7 @@ void main(){
  vColor=mix(vColor,mix(aurora,aColor,settle*(1.-loose))*glint*1.20,uPoster);
  vAlpha*=mix(1.,mix(.83,1.52,settle)*(1.+min(aFlow,0.)),uPoster);
  vAlpha*=mix(1.,(1.-fringeDistance)*.88,fringe*settle);
+ vAlpha*=mix(1.,edgeDust.w,fringe);
  float size=mix(2.1,1.9,settle)*uDpr*perspective;
  size*=mix(.70,1.3,aSeed.z)*mix(1.,.92,uPoster);
  size*=mix(1.,.78,fringe);
@@ -154,6 +158,7 @@ export class StatueStage{
    this.program=program;this.buffer=gl.createBuffer();this.uniforms={};for(const n of ['uPoster','uViewport','uPointer','uOrigin','uLayout','uTime','uAmount','uFormation','uRelease','uDpr','uReduced','uRipple0','uRipple1','uRipple2','uRipple3','uRipple4','uRippleSpread','uRippleSpreadTail','uSource0','uSource1','uSource2','uSource3','uSource4','uSourceCount'])this.uniforms[n]=gl.getUniformLocation(program,n);
    gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
    for(const [name,size,offset]of [['aTarget',3,0],['aColor',3,12],['aSeed',3,24],['aFlow',1,36]]){const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,40,offset);}
+   this.emissionLocation=gl.getAttribLocation(program,'aEmission');gl.disableVertexAttribArray(this.emissionLocation);gl.vertexAttrib2f(this.emissionLocation,0,0);
    gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.clearColor(0,0,0,0);this.renderer='webgl';
    this.canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();this.error='WebGL context lost; Canvas fallback';this.initFallback();if(this.points)this.prepareFallback();});
   }catch(error){this.error=error.message;this.initFallback();}
@@ -174,7 +179,7 @@ export class StatueStage{
   if(this.busy||now<this.timeline.cooldownUntil)return false;
   this.initRenderer();this.item=item;this.posterMode=item.style==='jiao-poster';const prepared=this.prepare(item);this.points=prepared.points;this.bounds=prepared.bounds;this.sources=sources.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).slice(0,5).map(p=>({x:clamp01(p.x),y:clamp01(p.y)}));this.origin=null;this.intervals=[];this.cadence={};this.ripples=[];this.lastRipple=-Infinity;this.handRippleCount=0;this.fingerRippleCount=Object.fromEntries(Object.keys(FINGER_TIPS).map(f=>[f,0]));this.fingerCooldowns={};this.lastPointerRipple=-Infinity;this.pointerRippleCount=0;this.lastRippleSource='';this.lastRippleFinger=null;this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.fallbackKey='';
   const packed=prepared.packed;this.particleCount=packed.count;
-  if(this.gl){this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.buffer);this.gl.bufferData(this.gl.ARRAY_BUFFER,packed.data,this.gl.STATIC_DRAW);}else this.prepareFallback();
+  if(this.gl){const gl=this.gl;gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferData(gl.ARRAY_BUFFER,packed.data,gl.STATIC_DRAW);const loc=this.emissionLocation;if(packed.emission){this.emissionBuffer??=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.emissionBuffer);gl.bufferData(gl.ARRAY_BUFFER,packed.emission,gl.STATIC_DRAW);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,8,0);}else if(this.emissionBuffer){gl.disableVertexAttribArray(loc);gl.vertexAttrib2f(loc,0,0);}}else this.prepareFallback();
   // Decode/upload before starting the clock so the first frame never skips ahead.
   this.timeline.start(performance.now());this.lastDraw=this.timeline.started;this.animationStarted=this.timeline.started;this.frames=0;this.canvas.hidden=false;this.canvas.setAttribute('data-renderer',this.renderer);this.canvas.setAttribute('data-effect',this.posterMode?'jiao-poster':'star-flight-cloud');this.canvas.setAttribute('data-source-count',String(this.sources.length));this.canvas.setAttribute('data-hand-ripples','0');this.canvas.setAttribute('data-last-ripple-source','');for(const f of Object.keys(FINGER_TIPS))this.canvas.setAttribute('data-'+f+'-ripples','0');this.canvas.setAttribute('data-last-ripple-finger','');return true;
  }
@@ -215,7 +220,7 @@ export class StatueStage{
   this.fallbackGroups=Array.from({length:12},()=>[]);
   for(let i=0;i<count;i++){const index=Math.floor(i*packed.count/count),o=index*10,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
    const fringe=this.posterMode&&data[o+9]>=2;
-   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:!fringe&&data[o+9]>.5&&seed.z>=(this.posterMode?.84:.89),fringe,fringeDistance:fringe?data[o+9]-2:0,opacity:this.posterMode?data[o+9]<0?1+data[o+9]:fringe?3-data[o+9]:1:1});
+   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:!fringe&&data[o+9]>.5&&seed.z>=(this.posterMode?.84:.89),fringe,emission:fringe?{x:packed.emission[index*2],y:packed.emission[index*2+1]}:null,opacity:this.posterMode?data[o+9]<0?1+data[o+9]:fringe?3-data[o+9]:1:1});
   }
   this.fallbackPose={};this.fallbackSurface={};this.fallbackFlight={};this.fallbackScreen={};this.fallbackDisplacement={};this.fallbackPalette=Array.from({length:12},(_,i)=>this.posterMode?`rgb(${69+i*10},${150+i*7},${177+i*6})`:`rgb(${138+i*9},${102+i*9},${56+i*8})`);
   this.haloSprite=document.createElement('canvas');this.haloSprite.width=this.haloSprite.height=24;const hc=this.haloSprite.getContext('2d'),halo=hc.createRadialGradient(12,12,0,12,12,12);halo.addColorStop(0,'#fff6ce');halo.addColorStop(.12,'#ffdf9bba');halo.addColorStop(.4,'#d8af6030');halo.addColorStop(1,'#d8af6000');hc.fillStyle=halo;hc.fillRect(0,0,24,24);this.glints=this.points.filter((_,i)=>i%1403===0);
@@ -232,7 +237,7 @@ export class StatueStage{
    for(const particle of this.fallbackGroups[group]){
     if(solid>.95&&!particle.loose&&!particle.fringe&&disturbed<.005)continue;
     target.x=particle.target.x*breath+particle.target.z*this.pointer.x*.055*motion;target.y=particle.target.y*breath+particle.target.z*this.pointer.y*.025*motion;target.z=particle.target.z;
-    if(particle.fringe)jiaoFringePose(target,particle.seed,time,particle.fringeDistance,motion,target);
+    let dustAlpha=1;if(particle.fringe){jiaoFringePose(target,particle.seed,time,particle.emission,motion,target);dustAlpha=target.alpha;}
     if(sample.hold&&!particle.loose){p.x=target.x;p.y=target.y;p.z=target.z;}else cloudPose(target,particle.seed,time,sample.formation,sample.release,particle.loose,motion,p);
     const settled=cloudSettle(particle.seed,sample.formation),perspective=1/(1+p.z*.32*(1-settled));
     let x=l.cx+p.x*l.size*zoom*perspective+this.pointer.x*46*settled*(1-sample.release)*motion;
@@ -240,7 +245,7 @@ export class StatueStage{
     let visibility=1;if(time<2.5){const source=sources[Math.floor(((particle.seed.z*17.31+particle.seed.x*7.17)%1)*sources.length)];screen.x=x;screen.y=y;const flight=starFlight(particle.seed,time,source,screen,Math.min(l.width,l.height),motion,this.fallbackFlight);x=flight.x;y=flight.y;visibility=flight.visibility;}
     if(waves.length){const d=rippleDisplacement(x,y,waves,Math.min(l.width,l.height)*.07,this.fallbackDisplacement);x+=d.x*freeMotion*motion;y+=d.y*freeMotion*motion;}
     c.globalAlpha=visibility*(1-smooth((sample.release-.65)/.35))*(particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));
-    if(this.posterMode)c.globalAlpha=visibility*(1-smooth((sample.release-.65)/.35))*particle.opacity*(particle.fringe?.60:particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));
+    if(this.posterMode)c.globalAlpha=visibility*(1-smooth((sample.release-.65)/.35))*particle.opacity*(particle.fringe?.60*dustAlpha:particle.loose?.19:(.38+.28*settled)*(1-solid*.85+disturbed*.85));
     const size=(.75+particle.seed.z*.55)*perspective*(1+disturbed*.55);c.fillRect(x,y,size,size);
    }
   }

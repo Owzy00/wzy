@@ -53,7 +53,7 @@ ey,ex=np.gradient(edge)
 by,bx=np.where((edge>.39)&(edge<.65)&(bright>.17))
 bweights=(bright[by,bx]**1.3+.08)*np.hypot(ex[by,bx],ey[by,bx])
 chosen_edge=rng.choice(len(by),25600,replace=True,p=bweights/bweights.sum())
-fringe=bytearray()
+fringe=bytearray();emission=bytearray()
 for i in chosen_edge:
  y,x=by[i],bx[i]
  norm=max(1e-8,np.hypot(ex[y,x],ey[y,x]));nx,ny=-ex[y,x]/norm,-ey[y,x]/norm
@@ -69,6 +69,7 @@ for i in chosen_edge:
  color=np.clip(color*.65+tint*.35,0,255).astype(int)
  opacity=round(255*.92*np.exp(-distance/.062)*rng.uniform(.65,1))
  fringe.extend(struct.pack('<hhhBBBB',round(px*1000),round(py*1000),round(pz*1000),*color,opacity))
+ emission.extend(struct.pack('<hh',round((nx*distance-ny*tangent)*1000),round((ny*distance+nx*tangent)*1000)))
 # Fine branching wakes leave actual sleeve / dragon / pedestal edges. Their
 # curved density is intentionally uneven, with open gaps for the star field.
 wisps=[(443,415,-175,-75,72),(617,136,-80,-115,38),(903,490,110,85,-55),(810,894,150,65,63),(177,794,-110,-85,-36),(180,1210,-115,30,51),(527,1425,165,-50,-44),(925,326,64,-85,32)]
@@ -83,6 +84,9 @@ for k,(ax,ay,dx,dy,bend) in enumerate(wisps):
   color=np.array([92,209,218]) if k%3 else np.array([149,161,229]);color=np.clip(color*rng.uniform(.8,1.15),0,255).astype(int)
   opacity=round(255*.64*(1-t)**.85*rng.uniform(.6,1))
   fringe.extend(struct.pack('<hhhBBBB',round(px*1000),round(py*1000),round(rng.normal(0,18)),*color,opacity))
+  emission.extend(struct.pack('<hh',round((x-ax)*1000/height),round((y-ay)*1000/height)))
 item={'id':0,'name':'角','title':'角木蛟','pinyin':'Jiao Mu Jiao','style':'jiao-poster','count':count,'aspect':width/height,'source':'user-jiao-poster.png','sourceSha256':hashlib.sha256(source.read_bytes()).hexdigest(),'sourceSize':[w,h],'crop':[left,top,width,height],'encoding':'base64-int16le-xyz-uint8-rgb/9bytes','depthNote':'Subtle image-based parallax, no 3D mesh.','data':base64.b64encode(packed).decode(),'edgeAlpha':base64.b64encode(np.uint8(np.round(edge_alpha*255)).tobytes()).decode(),'fringe':{'count':36000,'encoding':'base64-int16le-xyz-uint8-rgba/10bytes','data':base64.b64encode(fringe).decode()}}
+item['fringe']['emissionEncoding']='base64-int16le-xy/4bytes'
+item['fringe']['emission']=base64.b64encode(emission).decode()
 Path(args.output).write_text(json.dumps(item,ensure_ascii=False,separators=(',',':')),encoding='utf8')
 print(json.dumps({k:item[k] for k in ['count','sourceSha256','sourceSize','crop']},ensure_ascii=False))

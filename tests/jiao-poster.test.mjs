@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {createParticleBuffer,decodeCloud,StatueStage} from '../dist/particle-effects.js';
-import {jiaoOrbit,jiaoPresence,jiaoFringePose} from '../dist/jiao-style.js';
+import {jiaoOrbit,jiaoPresence,jiaoFringePose,drawJiaoAtmosphere} from '../dist/jiao-style.js';
 const item=JSON.parse(await readFile(new URL('../dist/data/jiao-poster.json',import.meta.url),'utf8'));
 test('Jiao uses the supplied poster figure, its own pose and colors, with no mesh',()=>{
  assert.equal(item.id,0);assert.equal(item.name,'角');assert.equal(item.title,'角木蛟');assert.equal(item.style,'jiao-poster');assert.equal(item.sourceSha256,'52ad4e6aac920997697c95d01bb156c5ea2f4fd2221c2d085cf89870886fae70');assert.equal(item.count,96000);
@@ -33,12 +33,39 @@ test('36k contour dust targets replace flow particles without inflating the budg
  for(const i of [0,17000,35999]){const o=i*10;assert.ok(Math.abs(packed.data[o]-fringe[i].x)<1e-7);assert.ok(Math.abs(packed.data[o+9]-(3-fringe[i].opacity))<1e-6);}
  assert.equal(packed.data[36000*10+9],1);assert.ok(packed.data[48000*10+9]<=0);
  assert.throws(()=>decodeCloud({...item,edgeAlpha:'AA=='}),/羽化/);assert.throws(()=>decodeCloud({...item,fringe:{...item.fringe,data:'AA=='}}),/流尘/);
+ assert.equal(Buffer.from(item.fringe.emission,'base64').length,36000*4);assert.equal(packed.emission.byteLength,144000*8);assert.ok(packed.emission.slice(36000*2).every(n=>n===0));
+ assert.ok(fringe.every(p=>Math.hypot(p.emitX,p.emitY)<.26));assert.ok(fringe.filter(p=>Math.hypot(p.emitX,p.emitY)>.01).length>20000);
+ assert.throws(()=>decodeCloud({...item,fringe:{...item.fringe,emission:'AA=='}}),/逸出/);
 });
 
-test('peripheral dust drifts locally over time and respects reduced motion without distorting the surface',()=>{
- const target={x:.3,y:-.4,z:.02},seed={x:.23,y:.81,z:.42},original={...target};
- for(const d of [0,.3,.7,1]){const a=jiaoFringePose(target,seed,3,d),b=jiaoFringePose(target,seed,7,d),r=jiaoFringePose(target,seed,3,d,.18);assert.ok(Math.hypot(a.x-target.x,a.y-target.y)<.017);assert.ok(Math.hypot(a.x-b.x,a.y-b.y)>.0001);assert.ok(Math.hypot(r.x-target.x,r.y-target.y)<.0031);assert.equal(a.z,target.z);}
+test('edge particles travel outwards from their contour anchor and vanish before each invisible recycle',()=>{
+ const target={x:.3,y:-.4,z:.02},seed={x:0,y:0,z:.42},original={...target},emission={x:.09,y:0},life=3+seed.z*2.2;
+ const a=jiaoFringePose(target,seed,life*.2,emission),b=jiaoFringePose(target,seed,life*.8,emission);
+ assert.ok(b.x>a.x+.05);assert.ok(a.x>target.x-emission.x);assert.ok(b.alpha<a.alpha);
+ for(const phase of [0,1e-5,1-1e-5,1]){const p=jiaoFringePose(target,seed,life*phase,emission);assert.ok(p.alpha<1e-5,'invisible at the recycle seam');}
+ const mid=jiaoFringePose(target,seed,life*.5,emission),repeat=jiaoFringePose(target,seed,life*1.5,emission);for(const k of ['x','y','z','alpha'])assert.ok(Math.abs(mid[k]-repeat[k])<1e-10);
+ const slow=jiaoFringePose(target,seed,life*.2/.18,emission,.18);for(const k of ['x','y','alpha'])assert.ok(Math.abs(slow[k]-a[k])<1e-10,'reduced motion slows the lifecycle');
  assert.deepEqual(target,original);
+});
+test('decorative atmosphere retains four dotted arcs and draws neither connected star chains nor their nodes',()=>{
+ const calls={strokes:0,fills:0,nodes:0,dashes:[]},ctx=new Proxy({stroke(){calls.strokes++;},fill(){calls.fills++;},arc(){calls.nodes++;},setLineDash(value){calls.dashes.push(value);}},{get:(o,k)=>o[k]||(()=>{})});
+ drawJiaoAtmosphere(ctx,{cx:500,cy:350,size:600,width:1280,height:720},5.6,1,0);
+ assert.equal(calls.strokes,4);assert.equal(calls.fills,0);assert.equal(calls.nodes,0);assert.ok(calls.dashes.every(d=>d.length===2));
+});
+test('switching away from Jiao disables its emission attribute so other statues retain their original motion',()=>{
+ const calls=[],stage=new StatueStage();stage.canvas={style:{},setAttribute(){}};stage.initRenderer=()=>{};stage.emissionLocation=4;
+ stage.gl={ARRAY_BUFFER:1,STATIC_DRAW:2,FLOAT:3,bindBuffer(){},bufferData(){},createBuffer(){return {};},enableVertexAttribArray(loc){calls.push(['enable',loc]);},vertexAttribPointer(){},disableVertexAttribArray(loc){calls.push(['disable',loc]);},vertexAttrib2f(loc,x,y){calls.push(['constant',loc,x,y]);}};
+ const poster={style:'jiao-poster'},ordinary={id:2};stage.prepare=item=>({points:[],bounds:{},packed:{count:0,data:new Float32Array(),...(item===poster?{emission:new Float32Array()}: {})}});
+ stage.start(poster,0);stage.timeline.state='IDLE';stage.timeline.cooldownUntil=0;stage.start(ordinary,100);
+ assert.deepEqual(calls,[['enable',4],['disable',4],['constant',4,0,0]]);
+});
+test('Canvas held contour particles keep shedding and fading rather than becoming part of the static body cache',()=>{
+ const stage=new StatueStage(),dots=[];stage.posterMode=true;stage.animationStarted=0;stage.origin={x:500,y:300};stage.body={};stage.fallbackPose={};stage.fallbackSurface={};stage.fallbackFlight={};stage.fallbackPalette=Array(12).fill('#bce2eb');
+ stage.context={globalAlpha:1,clearRect(){},fillRect(x,y){dots.push({x,y,alpha:this.globalAlpha});},drawImage(){}};
+ stage.fallbackGroups=Array.from({length:12},(_,i)=>i===0?[{target:{x:.3,y:-.2,z:0},seed:{x:0,y:0,z:.42},loose:false,fringe:true,emission:{x:.09,y:0},opacity:1}]:[]);
+ const layout=stage.layout(1280,720),sample={formation:1,release:0,presence:1,hold:true},life=3+.42*2.2;
+ stage.drawFallback(layout,life*1.2*1000,sample,false);const a=dots.at(-1);stage.drawFallback(layout,life*1.8*1000,sample,false);const b=dots.at(-1);
+ assert.equal(dots.length,2);assert.ok(b.x>a.x+25);assert.ok(b.alpha<a.alpha*.4);assert.ok(a.alpha>.5);
 });
 test('poster upload preserves cool colors with a 144k point budget and a separate bounded cache',()=>{
  const stage=new StatueStage(),points=decodeCloud(item),packed=createParticleBuffer(points,48000,true);assert.equal(packed.count,144000);assert.equal(packed.data.byteLength,144000*40);
@@ -59,5 +86,5 @@ test('Jiao uses one GPU draw and no point uploads per frame; other mansions do n
 test('the 28 original image assets and v21 navigation / gesture code stay unchanged',async()=>{
  const bytes=await readFile(new URL('../dist/data/statues.json',import.meta.url));assert.equal(createHash('sha256').update(bytes).digest('hex'),'70e0f1ef689c9508552c06d14673e3d8079c5b1660755607bc720a5c62220966');
  const baseline={"dist/app.js":"957005d6ffc94d5704460b7b4ba20f4689da7f18","dist/astronomy.js":"6022fe7be84cd816c16b02ae18a09115d21e85c5","dist/cloud-field.js":"1fdf09b69f34e71ae0a60cef025b74c085cddd5a","dist/gesture-camera.js":"b289de58b568aef57be7ef805b3662cd7be13b93","dist/gesture-core.js":"dd04d735a2b7a6f9e11a3a4f27069aeb2b072677","dist/hand-worker.js":"ff71cb724f9362bbca631c5b2526090e5c94dbd1","dist/style.css":"c951500c5d896aa3541bc74a735b4b16f7c4d5fc"};
- for(const [file,sha]of Object.entries(baseline)){const text=(await readFile(new URL('../'+file,import.meta.url),'utf8')).replaceAll('v=24','v=21');const data=Buffer.from(text);assert.equal(createHash('sha1').update(Buffer.from('blob '+data.length+'\0')).update(data).digest('hex'),sha,file);}
+ for(const [file,sha]of Object.entries(baseline)){const text=(await readFile(new URL('../'+file,import.meta.url),'utf8')).replaceAll('v=25','v=21');const data=Buffer.from(text);assert.equal(createHash('sha1').update(Buffer.from('blob '+data.length+'\0')).update(data).digest('hex'),sha,file);}
 });
