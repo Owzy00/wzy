@@ -1,5 +1,5 @@
-import {RAD,TAU,clamp,wrap,deltaAngle,vector,centerOf,projectSphere,projectAtlas,formatRA,formatDec,segmentSamples,panSky,nearestMansion,brightStarOrigins} from './astronomy.js?v=22';
-import {initExperience} from './experience.js?v=22';
+import {RAD,TAU,clamp,wrap,deltaAngle,vector,centerOf,projectSphere,projectAtlas,formatRA,formatDec,segmentSamples,panSky,nearestMansion,brightStarOrigins} from './astronomy.js?v=23';
+import {initExperience} from './experience.js?v=23';
 const $=id=>document.getElementById(id);
 let experience=null;
 const groups=[{name:'东方青龙',en:'AZURE DRAGON',symbol:'龙',direction:'东'},{name:'北方玄武',en:'BLACK TORTOISE',symbol:'玄',direction:'北'},{name:'西方白虎',en:'WHITE TIGER',symbol:'虎',direction:'西'},{name:'南方朱雀',en:'VERMILION BIRD',symbol:'雀',direction:'南'}];

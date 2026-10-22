@@ -17,4 +17,4 @@ body.morphing .vignette{opacity:calc(1 - var(--stage-presence))}.stage-title{opa
 
 #stage-input-hint{color:#d8c58e;font-size:9px;white-space:nowrap;margin-left:auto;margin-right:10px}#stage-input-hint:empty{display:none}@media(max-width:850px){#stage-input-hint{font-size:8px;width:auto;margin:0 10px 0 0}}
 
-body.model-3d #sky{cursor:grab}body.model-3d:active #sky{cursor:grabbing}body.model-3d .stage-title>p{color:#d4f5e9;text-shadow:0 0 28px #75cfc827}body.model-3d .stage-title>small,body.model-3d #stage-input-hint{color:#a4dcd2}
+body.jiao-poster .stage-title>p{color:#c3e9ef;text-shadow:0 0 24px #7ccbd321}body.jiao-poster .stage-title>small{color:#a6cbd7}

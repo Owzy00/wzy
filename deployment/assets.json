@@ -287,28 +287,21 @@
     ]
   },
   {
-    "path": "dist/data/kang-3d.json",
-    "bytes": 1920609,
-    "sha256": "0e4676909d629ee342367f096d67651a743193c410c1d26a77b4f035c097befa",
+    "path": "dist/data/jiao-poster.json",
+    "bytes": 1152408,
+    "sha256": "5a2482ef1f74bda8e3cb69f38cea1d29eda21d76947f3c8a0b3981971964186c",
     "parts": [
-      "deployment/assets/dist-data-kang-3d-json/000.b64",
-      "deployment/assets/dist-data-kang-3d-json/001.b64",
-      "deployment/assets/dist-data-kang-3d-json/002.b64",
-      "deployment/assets/dist-data-kang-3d-json/003.b64",
-      "deployment/assets/dist-data-kang-3d-json/004.b64",
-      "deployment/assets/dist-data-kang-3d-json/005.b64",
-      "deployment/assets/dist-data-kang-3d-json/006.b64",
-      "deployment/assets/dist-data-kang-3d-json/007.b64",
-      "deployment/assets/dist-data-kang-3d-json/008.b64",
-      "deployment/assets/dist-data-kang-3d-json/009.b64",
-      "deployment/assets/dist-data-kang-3d-json/010.b64",
-      "deployment/assets/dist-data-kang-3d-json/011.b64",
-      "deployment/assets/dist-data-kang-3d-json/012.b64",
-      "deployment/assets/dist-data-kang-3d-json/013.b64",
-      "deployment/assets/dist-data-kang-3d-json/014.b64",
-      "deployment/assets/dist-data-kang-3d-json/015.b64",
-      "deployment/assets/dist-data-kang-3d-json/016.b64",
-      "deployment/assets/dist-data-kang-3d-json/017.b64"
+      "deployment/assets/dist-data-jiao-poster-json/000.b64",
+      "deployment/assets/dist-data-jiao-poster-json/001.b64",
+      "deployment/assets/dist-data-jiao-poster-json/002.b64",
+      "deployment/assets/dist-data-jiao-poster-json/003.b64",
+      "deployment/assets/dist-data-jiao-poster-json/004.b64",
+      "deployment/assets/dist-data-jiao-poster-json/005.b64",
+      "deployment/assets/dist-data-jiao-poster-json/006.b64",
+      "deployment/assets/dist-data-jiao-poster-json/007.b64",
+      "deployment/assets/dist-data-jiao-poster-json/008.b64",
+      "deployment/assets/dist-data-jiao-poster-json/009.b64",
+      "deployment/assets/dist-data-jiao-poster-json/010.b64"
     ]
   }
 ]

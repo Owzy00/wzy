@@ -7,24 +7,24 @@ import {handLandmarks,tipIds} from './hand-fixtures.mjs';
 
 // Exercise the real experience coordinator with camera callbacks and the real timeline.
 // The small DOM facade lets the test control visibility and permission errors without a camera.
-async function scene(run,{model=null,selectedId=3}={}){
+async function scene(run,{poster=null,selectedId=3}={}){
  const names=['document','window','fetch','requestIdleCallback','cancelIdleCallback','innerWidth','innerHeight'],saved=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
  globalThis.innerWidth=1000;globalThis.innerHeight=800;
- const styles={},elements=new Map(),listeners={},classes=new Set(),idle=[];
+ const requests=[];const styles={},elements=new Map(),listeners={},classes=new Set(),idle=[];
  const element=id=>{if(!elements.has(id))elements.set(id,{id,hidden:['gesture-panel','statue-stage-ui','gesture-hud'].includes(id),style:{},value:0,textContent:'',setAttribute(name,value){this[name]=value;},focus(){},getContext(){return {};}});return elements.get(id);};
  const main={inert:false},bottom={inert:false};
  globalThis.document={hidden:false,body:{style:{setProperty(key,value){styles[key]=value;}},insertAdjacentHTML(){},classList:{toggle(name,value){if(value)classes.add(name);else classes.delete(name);},add(name){classes.add(name);},remove(name){classes.delete(name);}}},getElementById:element,querySelector:selector=>selector==='main'?main:bottom,addEventListener:(name,callback)=>listeners[name]=callback};
  globalThis.window={addEventListener:(name,callback)=>listeners[name]=callback};
- globalThis.fetch=async url=>({ok:true,json:async()=>url.includes('kang-3d')?model:({items:Array.from({length:28},(_,id)=>({id,name:model&&id===1?'亢':'宿'+id,title:'彩塑'+id,pinyin:'test'}))})});
+ globalThis.fetch=async url=>{requests.push(url);return {ok:true,json:async()=>url.includes('jiao-poster')?poster:({items:Array.from({length:28},(_,id)=>({id,name:poster&&id===0?'角':'宿'+id,title:'彩塑'+id,pinyin:'test'}))})};};
  globalThis.requestIdleCallback=callback=>idle.push(callback);globalThis.cancelIdleCallback=()=>{};
  let callbacks,selected=selectedId,selectedCount=0,panDistance=0,morphs=0,starts=0,stops=0,restores=0,touches=0;
  const stage={timeline:new MorphTimeline(),get busy(){return this.timeline.busy;},get occludesSky(){return this.busy;},prepare(){},interact(...args){this.lastInteraction=args;(this.interactions??=[]).push(args);touches++;},interactFingers(inputs,now,palm){this.lastFingers=inputs;this.interact(palm.x,palm.y,now,Math.max(0,...inputs.map(p=>p.strength)),'hand');},start(item,now,sources){this.sources=sources;if(!this.timeline.start(now))return false;this.item=item;morphs++;return true;},draw(ctx,now){return this.timeline.sample(now);},finish(now){this.timeline.finish(now);},pointer:{}};
  const camera={running:false,inferenceMs:30,async start(){starts++;this.running=true;callbacks.onStatus('running','已接入');},stop(){stops++;this.running=false;callbacks.onStatus('off','已关闭');}};
- const adapter={emissionSources:()=>[{x:.3,y:.4},{x:.5,y:.6}],selected:()=>({id:selected,name:model&&selected===1?'亢':'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
+ const adapter={emissionSources:()=>[{x:.3,y:.4},{x:.5,y:.6}],selected:()=>({id:selected,name:poster&&selected===0?'角':'宿'+selected}),blocked:()=>false,notice(){},ensureDust(){},stopNavigation(){},selectNearest(){selected=9;selectedCount++;return selected;},nearest:()=>9,mansionName:id=>'宿'+id,pan(dx,dy){panDistance+=Math.hypot(dx,dy);},snapshot:()=>({camera:{ra:1.2,dec:.1}}),restore(snapshot){assert.equal(snapshot.camera.ra,1.2);restores++;}};
  try{
   const experience=initExperience(adapter,{cameraFactory:(video,c)=>{callbacks=c;return camera;},stageFactory:()=>stage});
   await new Promise(resolve=>setImmediate(resolve));
-  await run({styles,experience,stage,camera,element,listeners,classes,callbacks,counts:()=>({starts,stops,morphs,selectedCount,panDistance,restores,touches}),emit:(pose,time,x=.5)=>callbacks.onSample(pose?{pose,palm:{x,y:.5},fingers:{index:{x:x+.02,y:.5,extended:true},ring:{x:x-.02,y:.5,extended:true}},span:.15,confidence:.95}:null,time,null,pose?1:0)});
+  await run({requests,styles,experience,stage,camera,element,listeners,classes,callbacks,counts:()=>({starts,stops,morphs,selectedCount,panDistance,restores,touches}),emit:(pose,time,x=.5)=>callbacks.onSample(pose?{pose,palm:{x,y:.5},fingers:{index:{x:x+.02,y:.5,extended:true},ring:{x:x-.02,y:.5,extended:true}},span:.15,confidence:.95}:null,time,null,pose?1:0)});
  }finally{for(const [name,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 }
 
@@ -78,4 +78,6 @@ test('coordinator preserves a drag across brief uncertain poses instead of reanc
 }));
 
 
-test('the coordinator selects the supplied mesh only for Kang and identifies real 3D in the UI',async()=>scene(async s=>{await s.element('morph-trigger').onclick();assert.equal(s.stage.item.kind,'mesh3d');assert.equal(s.stage.item.id,1);assert.match(s.element('stage-credit').innerHTML,/真实三维/);assert.equal(s.counts().morphs,1);},{model:{id:1,name:'亢',title:'亢金龙',pinyin:'Kang Jin Long',kind:'mesh3d'},selectedId:1}));
+test('only Jiao loads the poster asset and identifies its source in the existing stage UI',async()=>scene(async s=>{await s.element('morph-trigger').onclick();assert.equal(s.stage.item.style,'jiao-poster');assert.equal(s.stage.item.id,0);assert.match(s.element('stage-credit').innerHTML,/用户提供海报/);assert.equal(s.requests.filter(url=>url.includes('jiao-poster')).length,1);assert.equal(s.counts().starts,1);},{poster:{id:0,name:'角',title:'角木蛟',pinyin:'Jiao Mu Jiao',style:'jiao-poster'},selectedId:0}));
+
+test('other mansions retain the v21 image path without fetching Jiao or any 3D model',async()=>scene(async s=>{await s.element('morph-trigger').onclick();assert.equal(s.stage.item.id,3);assert.equal(s.stage.item.style,undefined);assert.ok(s.requests.every(url=>!url.includes('jiao-poster')&&!url.includes('kang-3d')));}));

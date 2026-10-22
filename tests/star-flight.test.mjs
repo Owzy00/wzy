@@ -30,7 +30,7 @@ test('breathing and depth parallax stay small, reverse naturally and never accum
  assert.deepEqual(statueSurface(target,10,{x:1,y:1},0),target);assert.equal(JSON.stringify(target),before);
 });
 test('the stage snapshots source positions rather than retaining live projected objects',()=>{
- const stage=new StatueStage();stage.initRenderer=()=>{stage.canvas={style:{},setAttribute(){}};stage.attributes={aTarget:0,aColor:1,aSeed:2,aFlow:3,aNormal:4};stage.gl=new Proxy({bindBuffer(){},bufferData(){}},{get:(target,key)=>target[key]||(()=>{})});};stage.prepare=()=>({points:[],packed:{count:0,stride:10,data:new Float32Array()}});
+ const stage=new StatueStage();stage.initRenderer=()=>{stage.canvas={style:{},setAttribute(){}};stage.gl={bindBuffer(){},bufferData(){}};};stage.prepare=()=>({points:[],packed:{count:0,data:new Float32Array()}});
  const source=[{x:.2,y:.3}];assert.equal(stage.start({id:3},0,source),true);source[0].x=.9;assert.deepEqual(stage.sources,[{x:.2,y:.3}]);
 });
 test('Canvas generation receives ripple displacement before the statue has settled',()=>{
