@@ -1,6 +1,6 @@
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=28';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=28';
-import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=28';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=29';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=29';
+import {drawJiaoAtmosphere,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=29';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
