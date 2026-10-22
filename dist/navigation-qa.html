@@ -2,8 +2,8 @@
 <style>body{margin:0;background:#080b0f;color:#dfd2ac;font:14px system-ui}main{padding:24px;position:relative;z-index:2}h1{font:22px serif}button{margin:4px;padding:10px;background:#10171d;border:1px solid #9c8653;color:#e2c982}canvas{position:fixed;inset:0}output{display:block;margin:16px 0;color:#e4cb83}p{max-width:720px;color:#9eacb7}</style>
 <canvas id="sky"></canvas><main><h1>手掌像鼠标一样拖动画布</h1><button id="slow">慢速拖到同一位置</button><button id="fast">快速拖到同一位置</button><button id="loop">拖动后原路返回</button><button id="low-rate">10Hz 连续性对比</button><button id="uncertain">短暂误识别对比</button><button id="live">播放低帧率拖动</button><canvas id="trace" style="inset:auto 24px 24px auto;width:400px;height:150px;background:#0a1118dd;border:1px solid #8a794a44;z-index:3" hidden></canvas><output id="readout">准备中</output><p>模拟张掌数据通过实际 HandNavigator 与天文投影函数回放；蓝线为 v20，金线为 v21。不申请摄像头，不代表真人手感实测。十字固定，亮星随画布移动；停手后不继续漂移。</p></main>
 <script type="module">
-import {HandNavigator} from './gesture-core.js?v=27';
-import {panSky,projectAtlas} from './astronomy.js?v=27';
+import {HandNavigator} from './gesture-core.js?v=28';
+import {panSky,projectAtlas} from './astronomy.js?v=28';
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 class PreviousNavigator{
  constructor(){this.reset();}
