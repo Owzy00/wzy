@@ -1,21 +1,23 @@
 const jiaoSmooth=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
+export const JIAO_DUST_SPREAD=1.5;
 // Each contour particle repeatedly leaves its own silhouette anchor. Staggered
 // lifetimes fade to zero before recycling, keeping the face and folds intact.
 export function jiaoFringePose(target,seed,time,emission,motion=1,out={}){
  const life=3+seed.z*2.2,cycle=time*motion/life+seed.x*.79+seed.y*.21,phase=cycle-Math.floor(cycle);
  const length=Math.hypot(emission.x,emission.y),nx=emission.x/Math.max(.0001,length),ny=emission.y/Math.max(.0001,length);
- const travel=.003+(Math.min(.13,length)*.9+.024)*phase,swirl=Math.sin(phase*4.5+seed.z*9)*(.002+phase*.010);
+ const travel=(.003+(Math.min(.13,length)*.9+.024)*phase)*JIAO_DUST_SPREAD,swirl=Math.sin(phase*4.5+seed.z*9)*(.002+phase*.010)*JIAO_DUST_SPREAD;
  out.x=target.x-emission.x+nx*travel-ny*swirl;
- out.y=target.y-emission.y+ny*travel+nx*swirl-phase*phase*.012;
+ out.y=target.y-emission.y+ny*travel+nx*swirl-phase*phase*.012*JIAO_DUST_SPREAD;
  out.z=target.z-phase*.012;
  out.alpha=jiaoSmooth(phase/.08)*(1-jiaoSmooth((phase-.26)/.74));out.phase=phase;return out;
 }
 export const JIAO_FRINGE_GLSL=`
 vec4 jiaoFringePose(vec3 target,vec3 seed,float time,vec2 emission,float motion){
+ float spread=${JIAO_DUST_SPREAD.toFixed(1)};
  float phase=fract(time*motion/(3.+seed.z*2.2)+seed.x*.79+seed.y*.21);
  float len=length(emission);vec2 normal=emission/max(.0001,len);
- float travel=.003+(min(.13,len)*.9+.024)*phase,swirl=sin(phase*4.5+seed.z*9.)*(.002+phase*.010);
- vec2 xy=target.xy-emission+normal*travel+vec2(-normal.y,normal.x)*swirl-vec2(0.,phase*phase*.012);
+ float travel=(.003+(min(.13,len)*.9+.024)*phase)*spread,swirl=sin(phase*4.5+seed.z*9.)*(.002+phase*.010)*spread;
+ vec2 xy=target.xy-emission+normal*travel+vec2(-normal.y,normal.x)*swirl-vec2(0.,phase*phase*.012*spread);
  float alpha=smoothstep(0.,.08,phase)*(1.-smoothstep(.26,1.,phase));
  return vec4(xy,target.z-phase*.012,alpha);
 }`;
