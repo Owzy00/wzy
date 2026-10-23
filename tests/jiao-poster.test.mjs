@@ -104,8 +104,18 @@ test('Jiao uses one GPU draw and no point uploads per frame; other mansions do n
 });
 
 
-test('the 28 original image assets and v30 navigation / gesture motion stay unchanged',async()=>{
+test('the original image assets, astronomy and v30 particle motion stay unchanged',async()=>{
  const bytes=await readFile(new URL('../dist/data/statues.json',import.meta.url));assert.equal(createHash('sha256').update(bytes).digest('hex'),'70e0f1ef689c9508552c06d14673e3d8079c5b1660755607bc720a5c62220966');
- const baseline={"dist/astronomy.js":"6022fe7be84cd816c16b02ae18a09115d21e85c5","dist/cloud-field.js":"1fdf09b69f34e71ae0a60cef025b74c085cddd5a","dist/gesture-core.js":"dd04d735a2b7a6f9e11a3a4f27069aeb2b072677","dist/hand-worker.js":"ff71cb724f9362bbca631c5b2526090e5c94dbd1"};
+ const baseline={"dist/astronomy.js":"6022fe7be84cd816c16b02ae18a09115d21e85c5","dist/cloud-field.js":"1fdf09b69f34e71ae0a60cef025b74c085cddd5a","dist/hand-worker.js":"ff71cb724f9362bbca631c5b2526090e5c94dbd1"};
  for(const [file,sha]of Object.entries(baseline)){const text=(await readFile(new URL('../'+file,import.meta.url),'utf8')).replaceAll('v=35','v=21');const data=Buffer.from(text);assert.equal(createHash('sha1').update(Buffer.from('blob '+data.length+'\0')).update(data).digest('hex'),sha,file);}
+});
+
+// v40 intentionally changes only navigation release/regrab behavior. Selection
+// and fingertip particle gestures keep the accepted implementation unchanged.
+test('v40 regrab keeps the accepted selection machine and fingertip particle input unchanged',async()=>{
+ const source=(await readFile(new URL('../dist/gesture-core.js',import.meta.url),'utf8')).replaceAll('\r\n','\n');
+ const selection=source.slice(source.indexOf('export class GestureMachine'),source.indexOf('// Resample measured'));
+ const fingertips=source.slice(source.indexOf('export class FingerParticleInput'));
+ assert.equal(createHash('sha256').update(selection).digest('hex'),'678f610392eccd90861dd4ce91e53e39b2ebdbfc1fc4db22edfb6fd5efd09eeb');
+ assert.equal(createHash('sha256').update(fingertips).digest('hex'),'cb2778172bb2643982c72e1ff8b53d3022d906bcf685820e2dc55f72cdcb4c4a');
 });

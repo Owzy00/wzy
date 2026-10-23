@@ -24,7 +24,8 @@ export function describeHand(landmarks,confidence=1,handCount=1){
  const palm=[0,5,9,13,17].reduce((s,i)=>({x:s.x+landmarks[i].x/5,y:s.y+landmarks[i].y/5}),{x:0,y:0});
  const local=palmFrame(landmarks);if(!local)return null;
  const fingers=Object.fromEntries(Object.entries(FINGER_TIPS).map(([name,id])=>[name,{x:1-landmarks[id].x,y:landmarks[id].y,z:Number.isFinite(landmarks[id].z)?landmarks[id].z:0,local:local(landmarks[id])}]));
- return {pose:count>=3?'open':count===0&&folded.every(Boolean)?'fist':extended[0]&&count===1?'point':'neutral',palm:{x:1-palm.x,y:palm.y},tip:{x:fingers.index.x,y:fingers.index.y},fingers,confidence,span};
+ const palmPoints=[0,5,9,13,17].map(id=>landmarks[id]),navigationBounds={left:1-Math.max(...palmPoints.map(p=>p.x)),right:1-Math.min(...palmPoints.map(p=>p.x)),top:Math.min(...palmPoints.map(p=>p.y)),bottom:Math.max(...palmPoints.map(p=>p.y))};
+ return {pose:count>=3?'open':count===0&&folded.every(Boolean)?'fist':extended[0]&&count===1?'point':'neutral',palm:{x:1-palm.x,y:palm.y},tip:{x:fingers.index.x,y:fingers.index.y},fingers,confidence,span,navigationBounds};
 }
 export class GestureMachine{
  constructor(){this.state='IDLE';this.pose='neutral';this.since=0;this.lastTime=-1;this.lastSeen=-1;this.cooldownUntil=0;this.progress=0;this.lastSelection=null;this.disarm();}
@@ -80,19 +81,28 @@ export class GestureMachine{
 // between observations: no velocity extrapolation or post-release inertia.
 export class HandNavigator{
  constructor(){this.reset();}
- reset(){this.previous=null;this.anchor=null;this.accepted=null;this.target={x:0,y:0};this.applied={x:0,y:0};this.motion={x:0,y:0};this.frames=[];this.interval=50;this.transport=0;this.lastSample=-1;this.lastArrival=-1;this.lastOpen=-1;this.missing=false;this.precisionUntil=-1;}
+ reset(){this.previous=null;this.anchor=null;this.accepted=null;this.target={x:0,y:0};this.applied={x:0,y:0};this.motion={x:0,y:0};this.frames=[];this.interval=50;this.transport=0;this.lastSample=-1;this.lastArrival=-1;this.lastOpen=-1;this.precisionUntil=-1;this.rearmNeeded=false;this.regrip=null;}
+ get awaitingGrip(){return this.rearmNeeded;}
+ // A missing or clipped palm releases the drag at its applied position. The
+ // return journey is ignored until the palm rests inside the camera again.
+ release(now=this.lastSample){this.reset();this.rearmNeeded=true;this.lastSample=Number.isFinite(now)?now:-1;}
  feed(sample,now,receivedAt=now){
   if(!Number.isFinite(now)||now<=this.lastSample)return;
-  if(!sample){
-   if(!this.previous||now-this.lastSample>180)this.reset();else this.missing=true;
-   return;
-  }
+  if(!sample||!sample.palm||![sample.palm.x,sample.palm.y].every(Number.isFinite)){this.release(now);return;}
+  const bounds=sample.navigationBounds||{left:sample.palm.x,right:sample.palm.x,top:sample.palm.y,bottom:sample.palm.y},margin=this.rearmNeeded?.06:.02;
+  if(!Object.values(bounds).every(Number.isFinite)||bounds.left<=margin||bounds.right>=1-margin||bounds.top<=margin||bounds.bottom>=1-margin){this.release(now);return;}
   const allowed=sample.pose==='open'||(sample.pose==='neutral'&&this.previous&&now-this.lastOpen<=180);
-  if(!allowed){this.reset();return;}
+  if(!allowed){if(this.rearmNeeded)this.release(now);else{this.reset();this.lastSample=now;}return;}
+  if(this.rearmNeeded){
+   const grip=this.regrip;this.lastSample=now;this.lastArrival=Math.max(now,receivedAt);
+   if(!grip||now-grip.last>250||distance(sample.palm,grip.palm)>.012){this.regrip={palm:{...sample.palm},since:now,last:now,samples:1};return;}
+   grip.last=now;grip.samples++;if(now-grip.since<180||grip.samples<3)return;
+   this.reset();
+  }
   let old=this.previous;
   const ratio=sample.span&&old?.span?sample.span/old.span:1;
-  if(old&&(now-old.t>600||distance(sample.palm,old)>.18||ratio<.6||ratio>1.6||(this.missing&&distance(sample.palm,old)>.04))){this.reset();old=null;}
-  this.missing=false;this.lastSample=now;this.lastArrival=Math.max(now,receivedAt);if(sample.pose==='open')this.lastOpen=now;
+  if(old&&(now-old.t>600||distance(sample.palm,old)>.18||ratio<.6||ratio>1.6)){this.release(now);return;}
+  this.lastSample=now;this.lastArrival=Math.max(now,receivedAt);if(sample.pose==='open')this.lastOpen=now;
   this.previous={...sample.palm,t:now,span:sample.span};
   if(!old){this.anchor={...sample.palm};this.accepted={...sample.palm};this.frames=[{t:now,x:0,y:0}];return;}
   const dt=now-old.t;

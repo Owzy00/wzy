@@ -9,10 +9,10 @@ for(const spec of POSTER_DEFINITIONS){const file=spec.url.split('?')[0];embedded
 app=app.replace('fetcher=url=>fetch(url)','fetcher=url=>Promise.resolve({ok:true,json:async()=>embeddedPosters[url.split("?")[0]]})');
 const worker=await readFile('dist/hand-worker.js','utf8');
 let html=await readFile('dist/index.html','utf8');
-html=html.replace('<link rel="stylesheet" href="./style.css?v=38">',()=>`<style>${css}</style>`).replace('<link rel="stylesheet" href="./experience.css?v=38">','').replace('<link rel="stylesheet" href="./mobile.css?v=38">','').replace('<script type="module" src="./app.js?v=39"></script>',()=>`<script type="module">\nconst embeddedData=${JSON.stringify(data)};\nconst embeddedPosters=${JSON.stringify(embeddedPosters)};\nglobalThis.XINGYE_WORKER_SOURCE=${JSON.stringify(worker)};\n${app}\n</script>`);
+html=html.replace('<link rel="stylesheet" href="./style.css?v=38">',()=>`<style>${css}</style>`).replace('<link rel="stylesheet" href="./experience.css?v=38">','').replace('<link rel="stylesheet" href="./mobile.css?v=38">','').replace('<script type="module" src="./app.js?v=40"></script>',()=>`<script type="module">\nconst embeddedData=${JSON.stringify(data)};\nconst embeddedPosters=${JSON.stringify(embeddedPosters)};\nglobalThis.XINGYE_WORKER_SOURCE=${JSON.stringify(worker)};\n${app}\n</script>`);
 html=html.replace('href="./" aria-label="星河化相首页"','href="#" aria-label="星河化相首页"');
 for(const [name,mime]of [['provenance.json','application/json'],['NOTICE.txt','text/plain']]){const source=await readFile('dist/data/'+name,'utf8');html=html.replaceAll('./data/'+name,`data:${mime};charset=utf-8,${encodeURIComponent(source)}`);}
 html=html.replaceAll('./assets/brand-emblem.png?v=35','data:image/png;base64,'+(await readFile('dist/assets/brand-emblem.png')).toString('base64'));
 await writeFile('dist/standalone.html',html);
-await writeFile('../星河化相-手势与彩塑-v39.html',html);
+await writeFile('../星河化相-手势与彩塑-v40.html',html);
 console.log('Standalone HTML generated, all star data and application code embedded.');
