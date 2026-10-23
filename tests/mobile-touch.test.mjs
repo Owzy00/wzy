@@ -14,7 +14,7 @@ function section(file,start,end){
  assert.ok(from>=0&&to>from,'the shipped pointer event section is present');return source.slice(from,to);
 }
 const mapHandlers=section('../dist/app.js','let pointerGestureHadMultiple=false;',"canvas.addEventListener('wheel'");
-const particleHandlers=section('../dist/experience.js',' const pointerSamples=new Map()'," document.addEventListener('visibilitychange',()=>{navigator.reset()");
+const particleHandlers=section('../dist/experience.js',' const pointerSamples=new Map()',' // Camera and gesture lifecycle.');
 const touch=(pointerId,x,y=200,target='sky')=>({pointerId,pointerType:'touch',clientX:x,clientY:y,target:{id:target}});
 
 function mapScene(){
