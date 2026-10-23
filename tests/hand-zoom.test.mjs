@@ -20,7 +20,7 @@ function zoomActivate(controller,gap=.8,start=0){for(const t of [0,60,120])zoomI
 
 test('a stable L shape enters from either a wide or narrow opening without a zoom jump',()=>{
  for(const gap of [.3,.8,1.4,2.4]){const z=new HandZoom();let r=zoomInput(z,0,{gap});assert.equal(r.consumed,true);assert.equal(r.active,false);assert.equal(r.factor,1);r=zoomInput(z,60,{gap});assert.equal(r.active,false);r=zoomInput(z,120,{gap});assert.equal(r.active,true);assert.equal(r.factor,1);}
- const z=new HandZoom();zoomInput(z,0);assert.equal(zoomInput(z,130).active,false,'one delayed sample cannot replace the three stable observations');
+ const z=new HandZoom();assert.equal(zoomInput(z,0).active,false);assert.equal(zoomInput(z,79).active,false,'activation cannot precede 80ms');assert.equal(zoomInput(z,80).active,true);const two=new HandZoom();zoomInput(two,0);assert.equal(zoomInput(two,80).active,true,'two reliable observations can acquire zoom after 80ms');
 });
 
 test('natural L shapes with the thumb below the index enter at different hand proportions',()=>{
@@ -81,6 +81,10 @@ test('a large isolated fingertip detection jump only reanchors and leaves no zoo
  assert.ok(zoomInput(z,420,{gap:2.3}).factor>1,'a subsequent measured closing still zooms out');
 });
 
-test('a briefly uncertain finger pose freezes the measurement instead of inventing a zoom',()=>{
- const z=new HandZoom();zoomActivate(z);const points=zoomHand();points[12]={x:.49,y:.54,z:0};const sample=describeHand(points,.96,1);assert.equal(z.feed(sample,points,180,true).factor,1);assert.deepEqual(zoomInput(z,240,{gap:1.2}),{consumed:true,active:true,factor:1});
+test('a briefly uncertain third finger keeps the measured thumb/index aperture active',()=>{
+ const z=new HandZoom();zoomActivate(z);const points=zoomHand();points[12]={x:.49,y:.54,z:0};const sample=describeHand(points,.96,1);assert.equal(z.feed(sample,points,180,true).factor,1);const next=zoomInput(z,240,{gap:1.2});assert.equal(next.consumed,true);assert.equal(next.active,true);assert.ok(next.factor<1);
+});
+
+test('bringing thumb and index together can still reduce scale while the index bends',()=>{
+ const z=new HandZoom();zoomActivate(z);const points=zoomHand();points[8]={x:.35,y:.60,z:0};points[4]={x:.34,y:.60,z:0};const sample=describeHand(points,.96,1);assert.equal(sample.pose,'fist','the old coarse pose classifier sees a fist during this pinch');const r=z.feed(sample,points,180,true);assert.equal(r.active,true);assert.equal(r.consumed,true);assert.ok(r.factor>1,'the measured closing still shrinks the map');
 });

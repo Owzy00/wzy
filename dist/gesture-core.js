@@ -96,7 +96,7 @@ export class HandNavigator{
   if(this.rearmNeeded){
    const grip=this.regrip;this.lastSample=now;this.lastArrival=Math.max(now,receivedAt);
    if(!grip||now-grip.last>250||distance(sample.palm,grip.palm)>.012){this.regrip={palm:{...sample.palm},since:now,last:now,samples:1};return;}
-   grip.last=now;grip.samples++;if(now-grip.since<180||grip.samples<3)return;
+   grip.last=now;grip.samples++;if(now-grip.since<80||grip.samples<2)return;
    this.reset();
   }
   let old=this.previous;

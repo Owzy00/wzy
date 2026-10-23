@@ -17,8 +17,9 @@ function fistHand(){const p=handLandmarks();for(const id of [8,12,16,20])p[id].y
 
 async function zoomScene(run,{deferPoster=false}={}){
  const names=['document','window','fetch','innerWidth','innerHeight','matchMedia','requestIdleCallback','cancelIdleCallback'],saved=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
- const elements=new Map(),events=new Map(),classes=new Set(),requests=[],zooms=[],pans=[],notices=[];
- let callbacks,selected=15,blocked=false,starts=0,stops=0,morphs=0,selections=0,stoppedNavigation=0,fingerFrames=0,clock=performance.now()+1000;
+ const elements=new Map(),events=new Map(),classes=new Set(),requests=[],zooms=[],zoomEvents=[],sampleScales=[],pans=[],notices=[];
+ const view={cameraScale:1,targetScale:1};
+ let callbacks,selected=15,blocked=false,starts=0,stops=0,morphs=0,selections=0,stoppedNavigation=0,stoppedPan=0,fingerFrames=0,clock=performance.now()+1000;
  const base=clock;let releasePoster;const posterGate=deferPoster?new Promise(resolve=>releasePoster=resolve):Promise.resolve();
  const element=id=>{if(!elements.has(id))elements.set(id,{id,hidden:['gesture-panel','statue-stage-ui','gesture-hud'].includes(id),style:{},textContent:'',value:0,setAttribute(name,value){this[name]=value;},focus(){},getContext(){return {clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},arc(){},fill(){}};}});return elements.get(id);};
  const listen=(type,listener)=>{if(!events.has(type))events.set(type,[]);events.get(type).push(listener);};
@@ -29,12 +30,15 @@ async function zoomScene(run,{deferPoster=false}={}){
  globalThis.fetch=async url=>{requests.push(url);await posterGate;const spec=POSTER_DEFINITIONS.find(p=>p.url===url);assert.ok(spec,'only a known poster may be loaded');return {ok:true,json:async()=>({...spec,count:96000})};};
  const stage={timeline:new MorphTimeline(),get busy(){return this.timeline.busy;},get occludesSky(){return this.busy;},prepare(){},pointer:{},interact(){},interactFingers(){fingerFrames++;},start(item,now){if(!this.timeline.start(now))return false;this.item=item;morphs++;return true;},draw(context,now){return this.timeline.sample(now);},finish(now){this.timeline.finish(now);}};
  const camera={running:false,inferenceMs:30,async start(){starts++;this.running=true;callbacks.onStatus('running','已接入');},stop(){stops++;this.running=false;callbacks.onSample(null,++clock,null,0);callbacks.onStatus('off','已关闭');}};
- const adapter={selected:()=>({id:selected,name:posterDefinition(selected).name}),stageDetails:()=>({id:selected,name:posterDefinition(selected).name,group:Math.floor(selected/7),members:[{id:1,ra:1,dec:.1,mag:1},{id:2,ra:1.02,dec:.15,mag:2}],center:{ra:1.01,dec:.125},lines:[[1,2]]}),blocked:()=>blocked,notice:text=>notices.push(text),nearest:()=>9,mansionName:id=>posterDefinition(id).name,stopNavigation(){stoppedNavigation++;},selectNearest(){selections++;selected=9;return selected;},pan:(dx,dy)=>pans.push({dx,dy}),zoom:factor=>zooms.push(factor),snapshot:()=>({camera:{ra:1,dec:0}}),restore(){}};
+ const adapter={selected:()=>({id:selected,name:posterDefinition(selected).name}),stageDetails:()=>({id:selected,name:posterDefinition(selected).name,group:Math.floor(selected/7),members:[{id:1,ra:1,dec:.1,mag:1},{id:2,ra:1.02,dec:.15,mag:2}],center:{ra:1.01,dec:.125},lines:[[1,2]]}),blocked:()=>blocked,notice:text=>notices.push(text),nearest:()=>9,mansionName:id=>posterDefinition(id).name,stopNavigation(){stoppedNavigation++;view.targetScale=view.cameraScale;},stopPan(){stoppedPan++;},selectNearest(){selections++;selected=9;return selected;},pan:(dx,dy)=>pans.push({dx,dy}),zoom:factor=>{zooms.push(factor);zoomEvents.push({time:clock,factor});view.targetScale/=factor;},snapshot:()=>({camera:{ra:1,dec:0}}),restore(){}};
  try{
   const experience=initExperience(adapter,{cameraFactory:(video,c)=>{callbacks=c;return camera;},stageFactory:()=>stage});
   await new Promise(resolve=>setImmediate(resolve));
-  const emit=(points,time,{confidence=.96,handCount=points?1:0,timing={}}={})=>{clock=time;callbacks.onSample(points?describeHand(points,confidence,handCount):null,time,points,handCount,{receivedAt:time,...timing});experience.beforeFrame(time);};
-  await run({base,experience,stage,camera,callbacks,element,emit,zooms,pans,requests,notices,releasePoster,setBlocked:value=>blocked=value,dispatch:(type,event={})=>{for(const callback of events.get(type)||[])callback(event);},frame:time=>{clock=time;experience.beforeFrame(time);},counts:()=>({starts,stops,morphs,selections,stoppedNavigation,fingerFrames})});
+  let lastFrame=null;
+  const tick=time=>{clock=time;experience.beforeFrame(time);lastFrame=time;};
+  const framesBefore=time=>{assert.ok(lastFrame===null||time>=lastFrame,'camera and display time only move forwards');for(let t=(lastFrame??time)+16;t<time;t+=16)tick(t);};
+  const emit=(points,time,{confidence=.96,handCount=points?1:0,timing={}}={})=>{framesBefore(time);clock=time;const before=view.targetScale;callbacks.onSample(points?describeHand(points,confidence,handCount):null,time,points,handCount,{receivedAt:time,...timing});sampleScales.push({time,before,after:view.targetScale});tick(time);};
+  await run({base,experience,stage,camera,callbacks,element,emit,zooms,zoomEvents,sampleScales,pans,requests,notices,releasePoster,scale:()=>view.targetScale,setBlocked:value=>blocked=value,dispatch:(type,event={})=>{for(const callback of events.get(type)||[])callback(event);},frame:time=>{framesBefore(time);tick(time);},counts:()=>({starts,stops,morphs,selections,stoppedNavigation,stoppedPan,fingerFrames})});
  }finally{releasePoster?.();for(const [name,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 }
 
@@ -62,8 +66,8 @@ test('whole-hand travel and apparent camera depth changes do not change aperture
 }));
 
 test('full-palm release reanchors navigation before a later palm drag',async()=>zoomScene(async s=>{
- armZoom(s);s.emit(zoomHand(1.15),s.base+180);const zoomCount=realZooms(s).length;
- s.emit(handLandmarks({dx:.06}),s.base+240);s.frame(s.base+280);assert.equal(s.pans.length,0);
+ armZoom(s);s.emit(zoomHand(1.15),s.base+180);
+ s.emit(handLandmarks({dx:.06}),s.base+240);const zoomCount=realZooms(s).length;s.frame(s.base+280);assert.equal(s.pans.length,0);
  s.emit(handLandmarks({dx:.06}),s.base+300);s.frame(s.base+350);assert.equal(s.pans.length,0);
  s.emit(handLandmarks({dx:.08}),s.base+400);s.frame(s.base+650);
  assert.ok(s.pans.some(p=>Math.hypot(p.dx,p.dy)>0));assert.equal(realZooms(s).length,zoomCount);assert.equal(s.counts().selections,0);assert.equal(s.counts().morphs,0);
@@ -104,22 +108,29 @@ test('poster preparation blocks pinch input before the stage has started',async(
  s.releasePoster();await pending;assert.equal(s.counts().morphs,1);
 },{deferPoster:true}));
 
-for(const interruption of ['missing','low confidence','two hands','uncertain finger']){
+for(const interruption of ['missing','low confidence','two hands']){
  test(interruption+' freezes zoom and reacquisition never uses the old distance baseline',async()=>zoomScene(async s=>{
-  armZoom(s);s.emit(zoomHand(1.15),s.base+180);const count=realZooms(s).length;
+  armZoom(s);s.emit(zoomHand(1.15),s.base+180);
   if(interruption==='missing')s.emit(null,s.base+240);
-  else if(interruption==='uncertain finger'){const points=zoomHand(.45);points[12].y=.54;s.emit(points,s.base+240);}
   else s.emit(zoomHand(.45),s.base+240,interruption==='two hands'?{handCount:2}:{confidence:.5});
-  assert.equal(realZooms(s).length,count);
+  const count=realZooms(s).length;s.frame(s.base+280);assert.equal(realZooms(s).length,count,'no remaining interpolation crosses a lost observation');
   s.emit(zoomHand(.45),s.base+300);assert.equal(realZooms(s).length,count,'the first valid sample only reanchors');
   s.frame(s.base+500);noOtherAction(s);
  }));
 }
 
+test('a briefly uncertain third finger no longer interrupts active two-finger zoom',async()=>zoomScene(async s=>{
+ armZoom(s);s.emit(zoomHand(1.1),s.base+180);s.frame(s.base+220);
+ const points=zoomHand(.95);points[12].y=.54;s.emit(points,s.base+240);const start=s.zoomEvents.length;
+ s.frame(s.base+290);assert.ok(s.zoomEvents.slice(start).some(event=>event.factor>1),'closing still reduces the view while another finger is uncertain');
+ s.emit(zoomHand(.8),s.base+300);s.frame(s.base+380);assert.ok(realZooms(s).some(factor=>factor>1));noOtherAction(s);
+}));
+
 for(const reset of ['capture dimensions','video resize']){
  test(reset+' resets the pinch baseline without a zoom jump',async()=>zoomScene(async s=>{
-  armZoom(s);s.emit(zoomHand(1.15),s.base+180);const count=realZooms(s).length;
+  armZoom(s);s.emit(zoomHand(1.15),s.base+180);
   if(reset==='capture dimensions')s.emit(null,s.base+240,{timing:{reset:true}});else s.element('hand-video').onresize();
+  const count=realZooms(s).length;
   s.emit(zoomHand(.4),s.base+300);assert.equal(realZooms(s).length,count);noOtherAction(s);
  }));
 }
@@ -138,4 +149,49 @@ test('page suspension releases the camera and restored pages do not inherit the 
  armZoom(s);s.emit(zoomHand(1.15),s.base+180);const count=realZooms(s).length;
  s.dispatch('pagehide');assert.equal(s.camera.running,false);s.dispatch('pageshow',{persisted:true});assert.equal(s.camera.running,true);
  s.emit(zoomHand(.4),s.base+300);assert.equal(realZooms(s).length,count);noOtherAction(s);assert.equal(s.counts().starts,2);assert.equal(s.counts().stops,1);
+}));
+
+test('10Hz camera samples produce multiple smooth display-frame zoom updates in both directions',async()=>zoomScene(async s=>{
+ armZoom(s);
+ for(const [offset,gap]of [[200,.95],[300,1.1],[400,1.25],[500,1.4]]){
+  s.emit(zoomHand(gap),s.base+offset);s.frame(s.base+offset+90);
+  const between=s.zoomEvents.filter(event=>event.time>s.base+offset&&event.time<s.base+offset+100&&Math.abs(event.factor-1)>1e-8);
+  assert.ok(between.length>=3,'opening must update several display frames between consecutive 10Hz camera captures');
+  assert.ok(between.every(event=>event.factor<1),'finger separation enlarges the sky');
+ }
+ for(const [offset,gap]of [[600,1.25],[700,1.1],[800,.95],[900,.8]]){
+  s.emit(zoomHand(gap),s.base+offset);s.frame(s.base+offset+90);
+  const between=s.zoomEvents.filter(event=>event.time>s.base+offset&&event.time<s.base+offset+100&&Math.abs(event.factor-1)>1e-8);
+  assert.ok(between.length>=3,'closing must update several display frames between camera captures');
+  if(offset>600)assert.ok(between.every(event=>event.factor>1),'fingers moving together reduce the sky');
+ }
+ noOtherAction(s);
+}));
+
+test('zoom ownership freezes only panning and does not overwrite the pending target scale',async()=>zoomScene(async s=>{
+ armZoom(s);
+ for(const [offset,gap]of [[200,1.0],[300,1.2],[400,1.4]]){s.emit(zoomHand(gap),s.base+offset);s.frame(s.base+offset+80);}
+ assert.ok(s.scale()>1,'opening changes the target scale');
+ assert.equal(s.counts().stoppedNavigation,0,'a full camera freeze would overwrite fov/zoom while rendering is still catching up');
+ assert.ok(s.counts().stoppedPan>=6,'zoom takes ownership of pan without freezing scale');
+ for(const observation of s.sampleScales)assert.equal(observation.after,observation.before,'capturing a new pinch sample must not reset the target scale');
+ noOtherAction(s);
+}));
+
+for(const interruption of ['camera off','blocked','hidden','frame clipped','stage busy']){
+ test(interruption+' cancels pending display-frame zoom with no residual scale movement',async()=>zoomScene(async s=>{
+  armZoom(s);s.emit(zoomHand(1.15),s.base+200);s.frame(s.base+216);
+  if(interruption==='camera off')s.camera.stop();
+  else if(interruption==='blocked')s.setBlocked(true);
+  else if(interruption==='hidden'){document.hidden=true;s.dispatch('visibilitychange');}
+  else if(interruption==='frame clipped'){const points=zoomHand(.8);points[4].x=-.02;s.emit(points,s.base+232);}
+  else await s.element('morph-trigger').onclick();
+  const count=realZooms(s).length;s.frame(s.base+500);assert.equal(realZooms(s).length,count,'released zoom must not retain buffered scale deltas');
+  assert.equal(s.pans.length,0);assert.equal(s.counts().selections,0);assert.equal(s.counts().morphs,interruption==='stage busy'?1:0);
+ }));
+}
+
+test('a stalled camera cannot leave display-frame zoom drifting indefinitely',async()=>zoomScene(async s=>{
+ armZoom(s);s.emit(zoomHand(1.15),s.base+200);s.frame(s.base+900);const count=realZooms(s).length;
+ s.frame(s.base+1200);assert.equal(realZooms(s).length,count);noOtherAction(s);
 }));

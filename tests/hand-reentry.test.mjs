@@ -49,6 +49,26 @@ test('a single missing sample immediately clears unfinished interpolation',()=>{
  navigator.feed(null,130);for(const now of [140,180,260,400])assert.deepEqual(navigator.step(now),{dx:0,dy:0},'no queued drag is applied after release');
 });
 
+test('a stationary off-centre palm regrabs at 80ms, never before, with no third-sample delay',()=>{
+ const navigator=new HandNavigator(),sample=x=>({pose:'open',palm:{x,y:.5},span:.15});
+ navigator.feed(sample(.4),0);navigator.feed(null,20);navigator.feed(sample(.7),30);
+ navigator.feed(sample(.7),109);assert.equal(navigator.awaitingGrip,true);assert.equal(navigator.previous,null);
+ navigator.feed(sample(.7),110);assert.equal(navigator.awaitingGrip,false);assert.equal(navigator.previous.x,.7);
+ assert.deepEqual(navigator.step(130),{dx:0,dy:0},'regrabbing only establishes an anchor');
+ navigator.feed(sample(.72),150);assert.ok(navigator.step(230).dx>0);
+ const lowRate=new HandNavigator();lowRate.feed(null,0);lowRate.feed(sample(.7),10);lowRate.feed(sample(.7),110);
+ assert.equal(lowRate.awaitingGrip,false,'10Hz input needs only its next sample, not 200ms for a third');
+});
+
+test('cumulative return movement beyond the resting radius restarts the 80ms grab timer',()=>{
+ const navigator=new HandNavigator(),sample=x=>({pose:'open',palm:{x,y:.5},span:.15});
+ navigator.feed(null,0);navigator.feed(sample(.70),10);navigator.feed(sample(.692),50);navigator.feed(sample(.684),90);
+ assert.equal(navigator.awaitingGrip,true);assert.equal(navigator.previous,null);
+ navigator.feed(sample(.684),169);assert.equal(navigator.awaitingGrip,true);
+ navigator.feed(sample(.684),170);assert.equal(navigator.awaitingGrip,false);assert.equal(navigator.previous.x,.684);
+ assert.deepEqual(navigator.step(220),{dx:0,dy:0});
+});
+
 for(const edge of [
  {name:'left',initial:{dx:.31},out:{dx:.40},near:{dx:.37},inside:{dx:.29},next:{dx:.31},axis:'dx',delta:-.02},
  {name:'right',initial:{dx:-.33},out:{dx:-.43},near:{dx:-.40},inside:{dx:-.31},next:{dx:-.33},axis:'dx',delta:.02},
@@ -84,8 +104,8 @@ test('a slow moving return cannot become stable merely because each individual s
 
 test('a stable regrab can be off centre and tolerates small landmark jitter',async()=>reentryScene(async s=>{
  moveStart(s);s.emit(null,310);const held={...s.camera};
- for(const [time,dx]of [[350,-.20],[410,-.197],[470,-.202],[530,-.20],[590,-.20]]){s.emit(handLandmarks({dx}),time);s.frame(time+20);sameView(s.camera,held);}
- s.emit(handLandmarks({dx:-.18}),690);s.frame(870);close(s.total().dx,-.06,'the off-centre anchor supports a new drag');
+ for(const [time,dx]of [[350,-.20],[380,-.197],[410,-.202],[430,-.20],[470,-.20]]){s.emit(handLandmarks({dx}),time);s.frame(time+20);sameView(s.camera,held);}
+ s.emit(handLandmarks({dx:-.18}),570);s.frame(750);close(s.total().dx,-.06,'the off-centre anchor supports a new drag');
 }));
 
 test('a stalled camera releases unfinished interpolation before the next display step',async()=>reentryScene(async s=>{
