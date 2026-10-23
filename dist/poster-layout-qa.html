@@ -1,4 +1,5 @@
-<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>星河化相 · 化形版式预览</title><link rel="stylesheet" href="./style.css?v=36"><link rel="stylesheet" href="./experience.css?v=35">
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>星河化相 · 化形版式预览</title><link rel="stylesheet" href="./style.css?v=38"><link rel="stylesheet" href="./experience.css?v=38">
+<link rel="stylesheet" href="./mobile.css?v=38">
 <style>body.qa-clean .qa-controls{display:none}.qa-controls{position:fixed;top:90px;left:50%;transform:translateX(-50%);z-index:20;display:flex;gap:12px;align-items:center;font:9px system-ui;color:#98afb8;background:#0a1015d9;padding:8px 14px;border:1px solid #88b8b433}.qa-controls button,.qa-controls select{font:9px system-ui;color:#c5e6e3;background:#0e1b21;border:1px solid #82bdba55;padding:5px}#sky{z-index:0}.qa-controls small{font-size:8px;opacity:.7}@media(max-width:850px){.qa-controls{top:82px;width:max-content;max-width:95vw;font-size:8px;gap:5px}.qa-controls small{display:none}.qa-controls select{width:80px}}</style>
 <canvas id="sky"></canvas><div class="vignette"></div><header class="topbar">
  <a class="brand" href="./" aria-label="星河化相首页"><svg class="brand-mark" viewBox="96 155 480 395" aria-hidden="true"><defs><filter id="brand-key" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 1 1 1 0 0"/></filter></defs><image filter="url(#brand-key)" href="./assets/brand-emblem.png?v=35" width="585" height="708"/></svg><span class="brand-name">星河化相<small>基于手势交互的山西玉皇庙<br>二十八星宿彩塑可视化设计</small></span></a>
@@ -7,8 +8,8 @@
 </header><main></main><footer class="bottom-panel"></footer>
 <div class="qa-controls"><small>版式预览 · 摄像头未开启</small><select id="qa-mansion" aria-label="预览星宿"></select><button id="qa-form">固定成形预览</button><button id="qa-sky">返回星空</button></div>
 <script type="module">
-import {initExperience} from './experience.js?v=35';
-import {StatueStage} from './particle-effects.js?v=35';
+import {initExperience} from './experience.js?v=38';
+import {StatueStage} from './particle-effects.js?v=38';
 import {RAD,centerOf,projectSphere} from './astronomy.js?v=35';
 document.body.classList.toggle('qa-clean',new URLSearchParams(location.search).has('clean'));
 const [rows,extra,catalogue]=await Promise.all(['stars','supplement','mansions'].map(n=>fetch('./data/'+n+'.json').then(r=>r.json())));

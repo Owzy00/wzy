@@ -1,3 +1,4 @@
+import {compactViewport,phoneLayout} from './responsive-layout.js?v=38';
 import {isPosterStyle,posterPalette} from './qinglong-posters.js?v=35';
 import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=35';
 import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=35';
@@ -152,7 +153,7 @@ export class StatueStage{
  get busy(){return this.timeline.busy;}
  // Reuse the last sky frame as a dimmed backdrop; transparent particles keep moving above it.
  get occludesSky(){return this.busy&&this.opacity>.01;}
- layout(width,height){const mobile=width<850;return {cx:width*(mobile?.44:.51),cy:height*.52,size:Math.max(100,Math.min(height-(mobile?175:140),width*(mobile?1.05:.72))),width,height};}
+ layout(width,height){const coarse=globalThis.matchMedia?.('(pointer:coarse)').matches||false;if(compactViewport(width,height,coarse)){const key=width+':'+height+':'+(this.item?.aspect||.6);if(this.phoneGeometryKey!==key){const css=globalThis.getComputedStyle?.(document.documentElement);this.phoneGeometry=phoneLayout(width,height,{safeTop:parseFloat(css?.getPropertyValue('--safe-top'))||0,safeBottom:parseFloat(css?.getPropertyValue('--safe-bottom'))||0,aspect:this.item?.aspect||.6}).statue;this.phoneGeometryKey=key;}return {...this.phoneGeometry};}return {cx:width*.51,cy:height*.52,size:Math.max(100,Math.min(height-140,width*.72)),width,height};}
  initRenderer(){
   if(this.canvas)return;
   this.canvas=document.createElement('canvas');this.canvas.id='statue-particles';this.canvas.setAttribute('aria-hidden','true');this.canvas.hidden=true;document.body.append(this.canvas);
@@ -270,7 +271,7 @@ export class StatueStage{
   const started=performance.now(),frameDelta=Math.max(0,Math.min(60,now-this.lastDraw));if(this.busy&&this.lastDraw){const dt=now-this.lastDraw;if(dt>0){this.intervals.push(dt);if(this.intervals.length>180)this.intervals.shift();}}this.lastDraw=now;
   const sample=this.timeline.sample(now);
   sample.presence=cloudPresence(sample.formation||0)*(1-(sample.release||0));if(sample.done){if(this.posterCanvas)this.posterCanvas.hidden=true;this.ripples=[];if(this.canvas){this.canvas.setAttribute?.('data-active-ripples','0');this.canvas.hidden=true;this.canvas.style.opacity='0';}this.opacity=0;return sample;}if(!this.busy)return sample;
-  const phase=sample.release>0?'release':sample.formation<.08?'emerging':sample.formation<.3?'cloud':sample.formation<.9?'silhouette':'formed';if(this.phase!==phase){this.phase=phase;this.canvas.setAttribute?.('data-phase',phase);this.canvas.setAttribute?.('data-phase-time',String(Math.round((now-this.animationStarted)/10)/100));}const l=this.layout(width,height);if(this.posterMode)l.size=Math.min(height-(width<850?150:110),width*(width<850?1.05:.76));if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
+  const phase=sample.release>0?'release':sample.formation<.08?'emerging':sample.formation<.3?'cloud':sample.formation<.9?'silhouette':'formed';if(this.phase!==phase){this.phase=phase;this.canvas.setAttribute?.('data-phase',phase);this.canvas.setAttribute?.('data-phase-time',String(Math.round((now-this.animationStarted)/10)/100));}const l=this.layout(width,height);if(this.posterMode&&!compactViewport(width,height,globalThis.matchMedia?.('(pointer:coarse)').matches||false))l.size=Math.min(height-110,width*.76);if(!this.origin)this.origin={x:anchor?.x??width*.5,y:anchor?.y??height*.5};
   this.currentLayout=l;const dpr=Math.min(devicePixelRatio||1,1.5);if(this.canvas.width!==Math.round(width*dpr)||this.canvas.height!==Math.round(height*dpr)){this.canvas.width=Math.round(width*dpr);this.canvas.height=Math.round(height*dpr);}
   this.opacity=sample.presence;this.canvas.style.opacity='1';const ease=reduced?1:1-Math.exp(-frameDelta/120);this.pointer.x+=(this.pointerTarget.x-this.pointer.x)*ease;this.pointer.y+=(this.pointerTarget.y-this.pointer.y)*ease;
   if(this.posterMode)this.drawPosterLines(l,now,sample,reduced);else if(this.posterCanvas)this.posterCanvas.hidden=true;
