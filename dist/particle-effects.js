@@ -1,7 +1,7 @@
-import {isPosterStyle,posterPalette} from './qinglong-posters.js?v=34';
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=34';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=34';
-import {drawJiaoAtmosphere,jiaoOrbit,jiaoPresence,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=34';
+import {isPosterStyle,posterPalette} from './qinglong-posters.js?v=35';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=35';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=35';
+import {drawJiaoAtmosphere,jiaoOrbit,jiaoPresence,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=35';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};

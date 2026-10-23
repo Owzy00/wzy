@@ -1,9 +1,9 @@
-import {POSTER_DEFINITIONS,posterDefinition,isPosterStyle,createPosterLoader,posterPalette} from './qinglong-posters.js?v=34';
-import {stagePresentation,stageEditorialMarkup} from './stage-editorial.js?v=34';
-import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=34';
-import {GestureCamera} from './gesture-camera.js?v=34';
-import {cloudPresence} from './cloud-field.js?v=34';
-import {WindField,StatueStage} from './particle-effects.js?v=34';
+import {POSTER_DEFINITIONS,posterDefinition,isPosterStyle,createPosterLoader,posterPalette} from './qinglong-posters.js?v=35';
+import {stagePresentation,stageEditorialMarkup} from './stage-editorial.js?v=35';
+import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=35';
+import {GestureCamera} from './gesture-camera.js?v=35';
+import {cloudPresence} from './cloud-field.js?v=35';
+import {WindField,StatueStage} from './particle-effects.js?v=35';
 export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new GestureCamera(video,callbacks),stageFactory=()=>new StatueStage()}={}){
  const visualStyles=new Map();let candidateAt=-Infinity;
  const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator(),handParticles=new FingerParticleInput();
