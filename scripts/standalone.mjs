@@ -14,5 +14,5 @@ html=html.replace('href="./" aria-label="星河化相首页"','href="#" aria-lab
 for(const [name,mime]of [['provenance.json','application/json'],['NOTICE.txt','text/plain']]){const source=await readFile('dist/data/'+name,'utf8');html=html.replaceAll('./data/'+name,`data:${mime};charset=utf-8,${encodeURIComponent(source)}`);}
 html=html.replaceAll('./assets/brand-emblem.png?v=35','data:image/png;base64,'+(await readFile('dist/assets/brand-emblem.png')).toString('base64'));
 await writeFile('dist/standalone.html',html);
-await writeFile('../星河化相-手势与彩塑-v36.html',html.replace('<title>星野 · 二十八宿观测台</title>','<title>星野 · 手势与彩塑 v36</title>'));
+await writeFile('../星河化相-手势与彩塑-v37.html',html);
 console.log('Standalone HTML generated, all star data and application code embedded.');
