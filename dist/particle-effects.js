@@ -1,7 +1,7 @@
-import {isPosterStyle,posterPalette} from './qinglong-posters.js?v=33';
-import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=33';
-import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=33';
-import {drawJiaoAtmosphere,jiaoOrbit,jiaoPresence,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=33';
+import {isPosterStyle,posterPalette} from './qinglong-posters.js?v=34';
+import {FINGER_TIPS,FINGER_RIPPLE_INTERVAL} from './gesture-core.js?v=34';
+import {CLOUD_GLSL,cloudPose,cloudSettle,cloudPresence,starFlight,statueSurface,prepareRippleWaves,rippleDisplacement,rippleActivity} from './cloud-field.js?v=34';
+import {drawJiaoAtmosphere,jiaoOrbit,jiaoPresence,jiaoFringePose,JIAO_FRINGE_GLSL} from './jiao-style.js?v=34';
 const clamp01=n=>Math.max(0,Math.min(1,n));
 const smooth=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const silk=t=>{t=clamp01(t);return t*t*t*(t*(t*6-15)+10);};
@@ -80,7 +80,7 @@ uniform vec4 uRipple0,uRipple1,uRipple2,uRipple3,uRipple4;
 uniform vec3 uRippleSpread;
 uniform vec2 uRippleSpreadTail;
 uniform float uHeritage;uniform vec3 uPosterLow,uPosterHigh,uPosterAccent;
-varying vec3 vColor;varying float vAlpha,vSpark;
+varying vec3 vColor;varying float vAlpha,vSpark,vSurface;
 ${CLOUD_GLSL}
 ${JIAO_FRINGE_GLSL}
 vec2 wake(vec2 p,vec4 ripple,float spread){
@@ -95,6 +95,8 @@ void main(){
  float motion=mix(1.,.18,uReduced),fringe=uPoster*step(1.5,aFlow),flow=clamp(aFlow,0.,1.),weather=uPoster*step(.0000001,dot(aEmission,aEmission));
  float fringeDistance=clamp(aFlow-2.,0.,1.),loose=flow*step(mix(.89,.84,uPoster),aSeed.z)*(1.-fringe);
  float settle=cloudSettle(aSeed,uFormation);
+ // Refine the held poster surface; weathering and loose v30 grains keep their material.
+ vSurface=uPoster*(1.-weather)*(1.-loose)*settle*(1.-uRelease);
  float breath=1.+sin(uTime*1.22)*.007*motion;
  vec3 target=aTarget;target.xy*=breath;
  vec4 edgeDust=jiaoFringePose(target,aSeed,uTime,aEmission*breath,motion);
@@ -114,6 +116,7 @@ void main(){
  pos+=disturbance*freeMotion*motion;
  float sweep=pow(max(0.,sin(aTarget.y*14.-uTime*2.3+aTarget.x*2.5)),20.)*settle*(1.-uRelease);
  float glint=.93+.07*sin(uTime*1.4+aSeed.x*24.)+sweep*.32;
+ glint=mix(glint,1.,vSurface*.8);
  float visibility=flight.z*(1.-smoothstep(.65,1.,uRelease));
  float layer=mix(1.,.76,flow);
  float alpha=mix(.72,.86,settle)*layer;
@@ -124,13 +127,15 @@ void main(){
  vColor=mix(gold,aColor,settle*(1.-loose)*.86)*glint;
  vec3 aurora=mix(vec3(.06,.48,.59),vec3(.32,.66,.94),aSeed.y);aurora=mix(aurora,vec3(.57,.42,.84),step(.82,aSeed.z)*.35);
  vec3 regional=mix(uPosterLow,uPosterHigh,aSeed.y);regional=mix(regional,uPosterAccent,step(.82,aSeed.z)*.35);aurora=mix(aurora,regional,uHeritage);
- vColor=mix(vColor,mix(aurora,aColor,settle*(1.-loose))*glint*1.20,uPoster);
+ vColor=mix(vColor,mix(aurora,aColor,settle*(1.-loose))*glint*mix(1.20,1.02,vSurface),uPoster);
  vAlpha*=mix(1.,mix(.83,1.52,settle)*(1.+min(aFlow,0.)),uPoster);
  vAlpha*=mix(1.,(1.-fringeDistance)*.88,fringe*settle);
  vAlpha*=mix(1.,edgeDust.w,weather);
+ vAlpha*=mix(1.,1.15/1.52,vSurface);
  float size=mix(2.1,1.9,settle)*uDpr*perspective;
  size*=mix(.70,1.3,aSeed.z)*mix(1.,.92,uPoster);
  size*=mix(1.,.78,fringe);
+ size=mix(size,1.55*uDpr*perspective,vSurface);
  float spark=fract(sin(dot(aSeed.xy,vec2(127.1,311.7)))*43758.5453);
  vSpark=loose>.5?step(.9985,spark):2.*step(.998,spark)*(1.-fringe);
  if(vSpark>1.5){size=(3.+sweep*6.)*uDpr;vAlpha*=.35+sweep*.65;vColor=mix(vColor,mix(vec3(1.,.90,.66),vec3(.79,.96,1.),uPoster),.5);}
@@ -139,8 +144,8 @@ void main(){
  gl_PointSize=max(1.,size);
 }`;
 const FLOW_FRAGMENT=`
-precision mediump float;uniform mediump float uPoster;varying vec3 vColor;varying float vAlpha,vSpark;
-void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;if(vSpark>1.5){float light=exp(-r*r*5.)*.32+exp(-abs(q.x)*45.-abs(q.y)*6.)+exp(-abs(q.y)*45.-abs(q.x)*6.);gl_FragColor=vec4(vColor,vAlpha*min(1.,light));return;}if(vSpark>.5&&uPoster>.5){if(r>1.)discard;gl_FragColor=vec4(vColor,vAlpha*exp(-r*r*4.));return;}if(vSpark>.5){if(q.y<abs(q.x)*1.6-.48||q.y>.36)discard;gl_FragColor=vec4(vec3(1.,.83,.40)*(.65+q.x*.6+q.y*.4),vAlpha);return;}if(r>1.)discard;float core=exp(-r*r*6.5),halo=exp(-r*r*2.8)*.24;gl_FragColor=vec4(vColor*(1.+core*.26),vAlpha*(core+halo));}
+precision mediump float;uniform mediump float uPoster;varying vec3 vColor;varying float vAlpha,vSpark,vSurface;
+void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;if(vSpark>1.5){float light=exp(-r*r*5.)*.32+exp(-abs(q.x)*45.-abs(q.y)*6.)+exp(-abs(q.y)*45.-abs(q.x)*6.);gl_FragColor=vec4(vColor,vAlpha*min(1.,light));return;}if(vSpark>.5&&uPoster>.5){if(r>1.)discard;gl_FragColor=vec4(vColor,vAlpha*exp(-r*r*4.));return;}if(vSpark>.5){if(q.y<abs(q.x)*1.6-.48||q.y>.36)discard;gl_FragColor=vec4(vec3(1.,.83,.40)*(.65+q.x*.6+q.y*.4),vAlpha);return;}if(r>1.)discard;float core=exp(-r*r*6.5),halo=exp(-r*r*2.8)*.24;vec3 color=mix(vColor*(1.+core*.26),vColor,vSurface);float coverage=mix(core+halo,exp(-r*r*1.25),vSurface);gl_FragColor=vec4(color,vAlpha*coverage);}
 `;
 export class StatueStage{
  constructor(){this.timeline=new MorphTimeline();this.pointer={x:0,y:0};this.pointerTarget={x:0,y:0};this.sources=[];this.ripples=[];this.lastRipple=-Infinity;this.quality=1;this.frameMs=0;this.lastDraw=0;this.renderer='uninitialized';this.intervals=[];this.cadence={};this.opacity=0;this.prepared=new Map();}
@@ -217,13 +222,13 @@ export class StatueStage{
 
  prepareFallback(){
   this.body=document.createElement('canvas');this.body.width=700;this.body.height=700;const c=this.body.getContext('2d');
-  for(const p of this.points){if(this.posterMode&&(p.emitX||p.emitY))continue;c.fillStyle=this.posterMode?`rgb(${Math.min(255,p.r*1.20)},${Math.min(255,p.g*1.20)},${Math.min(255,p.b*1.20)})`:`rgb(${Math.min(255,p.r*1.05+9)},${Math.min(255,p.g*1.02+6)},${Math.min(255,p.b*.94+4)})`;c.globalAlpha=this.posterMode?.95*(p.opacity??1):.82;const dot=this.posterMode?1.05:.9;c.fillRect((p.x+.5)*700,(p.y+.5)*700,dot,dot);}
+  for(const p of this.points){if(this.posterMode&&(p.emitX||p.emitY))continue;c.fillStyle=this.posterMode?`rgb(${Math.min(255,p.r*1.02)},${Math.min(255,p.g*1.02)},${Math.min(255,p.b*1.02)})`:`rgb(${Math.min(255,p.r*1.05+9)},${Math.min(255,p.g*1.02+6)},${Math.min(255,p.b*.94+4)})`;c.globalAlpha=this.posterMode?.95*(p.opacity??1):.82;const dot=this.posterMode?1.05:.9;c.fillRect((p.x+.5)*700,(p.y+.5)*700,dot,dot);}
   const packed=this.prepare(this.item).packed,data=packed.data,count=Math.min(12000,packed.count);
   const indices=[];if(this.posterMode){const other=[];for(let i=0;i<packed.count;i++){if(i>=packed.flowCount&&(packed.emission[i*2]||packed.emission[i*2+1]))indices.push(i);else other.push(i);}const remaining=Math.max(0,count-indices.length);for(let i=0;i<remaining;i++)indices.push(other[Math.floor(i*other.length/remaining)]);}else for(let i=0;i<count;i++)indices.push(Math.floor(i*packed.count/count));
   this.fallbackGroups=Array.from({length:12},()=>[]);
   for(const index of indices){const o=index*10,seed={x:data[o+6],y:data[o+7],z:data[o+8]};
    const fringe=this.posterMode&&data[o+9]>=2,weather=this.posterMode&&Boolean(packed.emission[index*2]||packed.emission[index*2+1]);
-   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:!fringe&&data[o+9]>.5&&seed.z>=(this.posterMode?.84:.89),fringe,weather,emission:weather?{x:packed.emission[index*2],y:packed.emission[index*2+1]}:null,color:weather||this.item?.style==='heritage-poster'?`rgb(${Math.min(255,Math.round(data[o+3]*306))},${Math.min(255,Math.round(data[o+4]*306))},${Math.min(255,Math.round(data[o+5]*306))})`:null,opacity:this.posterMode?data[o+9]<0?1+data[o+9]:fringe?3-data[o+9]:1:1});
+   this.fallbackGroups[Math.min(11,Math.floor(seed.z*12))].push({target:{x:data[o],y:data[o+1],z:data[o+2]},seed,loose:!fringe&&data[o+9]>.5&&seed.z>=(this.posterMode?.84:.89),fringe,weather,emission:weather?{x:packed.emission[index*2],y:packed.emission[index*2+1]}:null,color:weather||this.item?.style==='heritage-poster'?`rgb(${Math.min(255,Math.round(data[o+3]*260))},${Math.min(255,Math.round(data[o+4]*260))},${Math.min(255,Math.round(data[o+5]*260))})`:null,opacity:this.posterMode?data[o+9]<0?1+data[o+9]:fringe?3-data[o+9]:1:1});
   }
   this.fallbackPose={};this.fallbackSurface={};this.fallbackFlight={};this.fallbackScreen={};this.fallbackDisplacement={};this.fallbackPalette=Array.from({length:12},(_,i)=>this.posterMode?`rgb(${69+i*10},${150+i*7},${177+i*6})`:`rgb(${138+i*9},${102+i*9},${56+i*8})`);
   const regional=posterPalette(this.item?.id);if(this.item?.style==='heritage-poster'&&regional)this.fallbackPalette=Array.from({length:12},(_,i)=>'rgb('+regional.low.map((v,j)=>Math.round((v+(regional.high[j]-v)*i/11)*255)).join(',')+')');

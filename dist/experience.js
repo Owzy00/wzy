@@ -1,29 +1,24 @@
-import {posterDefinition,isPosterStyle,createPosterLoader,posterPalette} from './qinglong-posters.js?v=33';
-import {stagePresentation,stageEditorialMarkup} from './stage-editorial.js?v=33';
-import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=33';
-import {GestureCamera} from './gesture-camera.js?v=33';
-import {cloudPresence} from './cloud-field.js?v=33';
-import {WindField,StatueStage} from './particle-effects.js?v=33';
+import {POSTER_DEFINITIONS,posterDefinition,isPosterStyle,createPosterLoader,posterPalette} from './qinglong-posters.js?v=34';
+import {stagePresentation,stageEditorialMarkup} from './stage-editorial.js?v=34';
+import {GestureMachine,HandNavigator,FingerParticleInput} from './gesture-core.js?v=34';
+import {GestureCamera} from './gesture-camera.js?v=34';
+import {cloudPresence} from './cloud-field.js?v=34';
+import {WindField,StatueStage} from './particle-effects.js?v=34';
 export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new GestureCamera(video,callbacks),stageFactory=()=>new StatueStage()}={}){
  const visualStyles=new Map();let candidateAt=-Infinity;
  const ui=id=>document.getElementById(id),wind=new WindField(),stage=stageFactory(),machine=new GestureMachine(),navigator=new HandNavigator(),handParticles=new FingerParticleInput();
- let pack=null,packError=null,restoring=null,lastPhase='',windDrag=null,lastManualWind=-9999,lastSample=0,modelState='off',sampleCount=0,preparing=false,warmTask=null,lastCandidate=null,lastHud='',lastCountdown=-1,lastHandCount=0,resumeAfterPageShow=false,lastHand=null,lastPointer=null;
+ let restoring=null,lastPhase='',windDrag=null,lastManualWind=-9999,lastSample=0,modelState='off',sampleCount=0,preparing=false,lastCandidate=null,lastHud='',lastCountdown=-1,lastHandCount=0,resumeAfterPageShow=false,lastHand=null,lastPointer=null;
  const states={IDLE:'张开单掌，拖动星图',NAVIGATING:'张掌拖动 · 停手即停 · 握拳点亮',FIST_ARMING:'握拳锁定…',FIST_READY:'已点亮 · 张掌化形',OPENING:'张掌化形…',COOLDOWN:'移手继续探索',LOST:'请将一只手放入画面',BLOCKED:'彩塑展示中 · 即将自动返回'};
  document.body.insertAdjacentHTML('beforeend',`<div class="experience-actions"><button id="gesture-toggle" aria-expanded="false">◌ 手势交互</button><button id="morph-trigger">✧ 粒子化形</button></div>
  <section class="gesture-panel" id="gesture-panel" hidden aria-label="手势控制"><div class="gesture-panel-head"><strong>以手，环顾星空</strong><button id="gesture-close" aria-label="收起手势面板">×</button></div><p>张掌像拖动画布一样移动星图，停手即停，将星宿移近中央准星。握拳点亮，再张掌化形；成形约 4 秒后自动返回。生成与展示时，任意一根手指相对手掌晃动，即可泛起局部涟漪；整手移动不发波，波纹留在实际晃动的指尖对应处，同时最多五处，同一指尖不叠圈；也可移动鼠标，随后平滑归位。</p><div class="gesture-meter"><span id="gesture-pose">正在接入摄像头</span><progress id="gesture-progress" max="1" value="0" aria-label="握拳张掌进度"></progress></div><p id="camera-status" role="status" aria-live="polite">首次进入时请允许摄像头。视频仅在本机处理，不上传、不录制。</p><div class="gesture-buttons"><button id="camera-start">开启摄像头</button><button id="camera-stop" disabled>关闭摄像头</button></div><button id="manual-wind">↝ 推动星尘 <kbd>W</kbd></button><p class="camera-note">收起面板仍可交互。双手入镜或丢手会重置手势。备选：鼠标拖动环顾，M 化形，Esc 返回。</p></section>
  <section id="gesture-hud" class="gesture-hud" aria-label="摄像头与操作提示" data-camera-state="off"><div class="camera-card-head"><span><i class="live-dot"></i>手势预览</span><button id="camera-card-control" aria-label="开启摄像头">开启</button></div><div id="camera-viewport" class="camera-viewport"><video id="hand-video" autoplay muted playsinline aria-label="本机镜像摄像头预览"></video><canvas id="hand-overlay" aria-hidden="true"></canvas><div id="camera-placeholder" class="camera-placeholder"><span id="camera-placeholder-text">摄像头未开启</span><small>画面仅在本机处理</small></div></div><div class="camera-guide"><span class="camera-sky-steps">张掌 · 拖动星图<br>握拳 · 点亮星宿<br>张掌 · 粒子化形</span><span class="camera-morph-steps">轻晃指尖，泛起粒子涟漪</span></div><div class="camera-feedback"><span id="gesture-hint" role="status" aria-live="polite">正在接入摄像头…</span><progress id="gesture-hud-progress" max="1" value="0" aria-label="手势操作进度"></progress></div></section>
- <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><aside id="stage-atlas" class="stage-atlas" aria-label="当前星宿固定星象"></aside><aside id="stage-record" class="stage-record" aria-label="彩塑与星宿介绍"></aside><div class="stage-title"><small id="stage-index" class="stage-index"></small><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture</span><span id="stage-input-hint" aria-live="polite"></span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
+ <section id="statue-stage-ui" class="statue-stage-ui" hidden aria-label="彩塑粒子化形"><aside id="stage-atlas" class="stage-atlas" aria-label="当前星宿固定星象"></aside><aside id="stage-record" class="stage-record" aria-label="彩塑与星宿介绍"></aside><div class="stage-title"><small id="stage-index" class="stage-index"></small><p id="stage-title"></p><span id="stage-pinyin"></span><small id="stage-phase"></small></div><div class="stage-bottom"><span id="stage-credit">用户提供海报 · 粒子化形<br>主体姿态与颜色取自海报</span><span id="stage-input-hint" aria-live="polite"></span><span id="stage-countdown">成形后自动返回星空</span><button id="stage-return">回到星图 <kbd>Esc</kbd></button></div></section>`);
  const loadPoster=createPosterLoader();
  function warmSelected(){
-  if(warmTask!==null){if(globalThis.cancelIdleCallback)cancelIdleCallback(warmTask);else clearTimeout(warmTask);}
-  const id=adapter.selected().id;
-  if(posterDefinition(id)){loadPoster(id).then(item=>{if(!stage.busy&&adapter.selected().id===id){stage.initRenderer?.();stage.prepare(item);}}).catch(()=>{});return;}
-  const item=pack?.items.find(p=>p.id===id);if(!item)return;
-  const warm=()=>{warmTask=null;if(!stage.busy&&adapter.selected().id===id){stage.initRenderer?.();stage.prepare(item);}};
-  warmTask=globalThis.requestIdleCallback?requestIdleCallback(warm,{timeout:600}):setTimeout(warm,30);
+  const id=adapter.selected().id;if(!posterDefinition(id))return;
+  loadPoster(id).then(item=>{if(!stage.busy&&adapter.selected().id===id){stage.initRenderer?.();stage.prepare(item);}}).catch(()=>{});
  }
  warmSelected();
- const loadPack=fetch('./data/statues.json').then(r=>{if(!r.ok)throw new Error('素材点云未找到');return r.json();}).then(data=>{if(data.items.length!==28)throw new Error('点云素材不完整');pack=data;warmSelected();return data;}).catch(error=>{packError=error;return null;});
  function status(state,text){
   modelState=state;ui('camera-status').textContent=text;ui('camera-start').disabled=state==='loading'||state==='running';ui('camera-stop').disabled=state==='off'||state==='error';ui('camera-start').textContent=state==='loading'?'正在准备…':'开启摄像头';document.body.classList.toggle('camera-running',state==='running');ui('gesture-hud').setAttribute('data-camera-state',state);ui('gesture-hud').hidden=false;
   const ready=state==='running'||(state==='loading'&&ui('hand-video').readyState>=2);ui('camera-placeholder').hidden=ready;
@@ -78,14 +73,10 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
   if(stage.busy||preparing)return;
   preparing=true;navigator.reset();handParticles.reset();adapter.stopNavigation();
   const selected=adapter.selected();let item;
-  if(posterDefinition(selected.id)){
-   try{adapter.notice('正在准备'+posterDefinition(selected.id).title+'海报粒子…');item=await loadPoster(selected.id);}
-   catch(error){preparing=false;machine.reset(performance.now());adapter.notice(error.message);return;}
-  }else{
-   if(!pack){adapter.notice('正在准备彩塑点云…');await loadPack;}
-   if(!pack){preparing=false;machine.reset(performance.now());adapter.notice(packError?.message||'素材载入失败，请刷新重试');return;}
-   item=pack.items.find(p=>p.id===selected.id&&p.name===selected.name);
-  }
+  const definition=posterDefinition(selected.id);
+  if(!definition){preparing=false;adapter.notice('当前宿的海报尚未就绪');return;}
+  try{adapter.notice('正在准备'+definition.title+'海报粒子…');item=await loadPoster(selected.id);}
+  catch(error){preparing=false;machine.reset(performance.now());adapter.notice(error.message);return;}
   if(adapter.selected().id!==selected.id){preparing=false;machine.reset(performance.now());adapter.notice('星宿已切换，请重新触发化形');return;}
   if(!item){preparing=false;adapter.notice('当前宿的彩塑映射尚未就绪');return;}
   const snapshot=adapter.snapshot();
@@ -93,7 +84,7 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
   ui('stage-atlas').innerHTML=editorial.atlas;ui('stage-record').innerHTML=editorial.record;ui('stage-index').textContent=editorial.index;
   try{if(!stage.start(item,performance.now(),adapter.emissionSources?.()||[])){adapter.notice('化形正在冷却，请稍候');return;}}catch(error){adapter.notice('化形未能启动，请重试：'+error.message);return;}finally{preparing=false;}
   const region=item.style==='heritage-poster'?posterPalette(item.id):null;document.body.classList.toggle('heritage-poster',Boolean(region));if(region){document.body.style.setProperty('--poster-ink',region.ink);document.body.style.setProperty('--poster-accent',region.orbits[0]);}
-  restoring=snapshot;lastCountdown=-1;machine.reset(performance.now(),'BLOCKED');document.body.classList.add('morphing');document.body.classList.toggle('jiao-poster',isPosterStyle(item.style));ui('stage-credit').innerHTML=isPosterStyle(item.style)?'用户提供海报 · '+item.title+'粒子演绎<br>主体姿态与颜色取自海报':'用户授权彩塑 · 2.5D 粒子演绎<br>摄影原图水印：乐观人文 / LeGuan Culture';ui('statue-stage-ui').hidden=false;ui('stage-title').textContent=item.title;ui('stage-pinyin').textContent=item.pinyin;ui('morph-trigger').disabled=true;document.querySelector('main').inert=true;document.querySelector('.bottom-panel').inert=true;ui('stage-return').focus({preventScroll:true});
+  restoring=snapshot;lastCountdown=-1;machine.reset(performance.now(),'BLOCKED');document.body.classList.add('morphing');document.body.classList.toggle('jiao-poster',isPosterStyle(item.style));ui('stage-credit').innerHTML=isPosterStyle(item.style)?'用户提供海报 · '+item.title+'粒子演绎<br>主体姿态与颜色取自海报':'用户提供海报 · 粒子化形<br>主体姿态与颜色取自海报';ui('statue-stage-ui').hidden=false;ui('stage-title').textContent=item.title;ui('stage-pinyin').textContent=item.pinyin;ui('morph-trigger').disabled=true;document.querySelector('main').inert=true;document.querySelector('.bottom-panel').inert=true;ui('stage-return').focus({preventScroll:true});
  }
  function returnToSky(){stage.finish(performance.now());}
  ui('camera-card-control').onclick=()=>{if(modelState==='off'||modelState==='error')camera.start();else panel(ui('gesture-panel').hidden);};
@@ -126,6 +117,6 @@ export function initExperience(adapter,{cameraFactory=(video,callbacks)=>new Ges
   pointerDown(event){if(stage.busy)return true;if(event.shiftKey){windDrag={x:event.clientX,y:event.clientY,t:performance.now(),lastX:event.clientX,lastY:event.clientY};event.currentTarget.setPointerCapture(event.pointerId);return true;}return false;},
   pointerMove(event){if(stage.busy)return true;if(!windDrag)return false;windDrag.lastX=event.clientX;windDrag.lastY=event.clientY;return true;},
   pointerUp(event){if(stage.busy)return true;if(!windDrag)return false;const d=windDrag;windDrag=null;const seconds=Math.max(.12,(performance.now()-d.t)/1000);manualWind((event.clientX-d.x)/innerWidth/seconds*2,(event.clientY-d.y)/innerHeight/seconds*2,event.clientX/innerWidth,event.clientY/innerHeight);return true;},
-  get diagnostics(){return {gestureState:machine.state,cameraState:modelState,cameraBackend:camera.backend,cameraWorkerError:camera.workerError,inferenceMs:camera.inferenceMs,cameraLatencyMs:camera.latencyMs||0,cameraSampleHz:camera.sampleHz||0,handSampleIntervalMs:Math.round(navigator.interval||0),sentFrames:camera.sent,receivedFrames:camera.received,sampleCount,gestureCandidate:lastCandidate,cameraSuspended:camera.suspended,handRippleCount:stage.handRippleCount||0,fingerRippleCount:{...stage.fingerRippleCount},activeRipples:stage.ripples?.length||0,lastRippleSource:stage.lastRippleSource||null,morphState:stage.timeline.state,morphPoints:stage.item?.count||0,morphFrameMs:stage.frameMs,particleQuality:stage.quality,morphRenderer:stage.renderer,morphError:stage.error||null,morphCadence:stage.cadence,assetCount:pack?.items.length||0,windGusts:wind.gusts.length};}
+  get diagnostics(){return {gestureState:machine.state,cameraState:modelState,cameraBackend:camera.backend,cameraWorkerError:camera.workerError,inferenceMs:camera.inferenceMs,cameraLatencyMs:camera.latencyMs||0,cameraSampleHz:camera.sampleHz||0,handSampleIntervalMs:Math.round(navigator.interval||0),sentFrames:camera.sent,receivedFrames:camera.received,sampleCount,gestureCandidate:lastCandidate,cameraSuspended:camera.suspended,handRippleCount:stage.handRippleCount||0,fingerRippleCount:{...stage.fingerRippleCount},activeRipples:stage.ripples?.length||0,lastRippleSource:stage.lastRippleSource||null,morphState:stage.timeline.state,morphPoints:stage.item?.count||0,morphFrameMs:stage.frameMs,particleQuality:stage.quality,morphRenderer:stage.renderer,morphError:stage.error||null,morphCadence:stage.cadence,assetCount:POSTER_DEFINITIONS.length,windGusts:wind.gusts.length};}
  };
 }

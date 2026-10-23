@@ -1,5 +1,5 @@
-import {posterDefinition} from './qinglong-posters.js?v=33';
-import {deltaAngle,formatRA,formatDec} from './astronomy.js?v=33';
+import {posterDefinition} from './qinglong-posters.js?v=34';
+import {deltaAngle,formatRA,formatDec} from './astronomy.js?v=34';
 
 const stageGroups=['东方青龙','北方玄武','西方白虎','南方朱雀'];
 const qinglongNotes=[
